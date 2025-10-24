@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <title>Ganti Halaman PDF</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  
+  <link rel="stylesheet" href="style.css">
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+</head>
+<body>
+
+  <header class="page-header">
+    <a href="index.html" class="back-link">← Kembali ke Portal</a>
+    <h1>Ganti Halaman PDF</h1>
+    <p>Ganti halaman tertentu di file PDF Utama dengan halaman dari file PDF Sisipan.</p>
+  </header>
+
+  <main class="container">
+    <div class="card">
+      
+      <label for="halamanGanti" class="setting-label">🔢 Halaman yang akan diganti (pisahkan dengan koma)</label>
+      <input type="text" id="halamanGanti" class="input-field" placeholder="Contoh: 1, 3, 5">
+       
+      <label class="setting-label">🗂️ PDF Utama (bisa lebih dari 1)</label>
+      <div id="utamaDrop" class="dropzone">Klik / Drop PDF Utama</div>
+     
+      <label class="setting-label">🧩 PDF Sisipan (jumlah harus sama)</label>
+      <div id="sisipanDrop" class="dropzone">Klik / Drop PDF Sisipan</div>
+
+    </div>
+
+    <button id="startButton" class="button-primary button-large" disabled>Mulai Proses</button>
+    <div id="output" class="status-box">Menunggu input...</div>
+
+  </main>
+
+  <script>
+    let utamaFiles = [];
+    let sisipanFiles = [];
+    const { PDFDocument } = PDFLib;
+    // BARU: Mendapatkan JSZip (pastikan library sudah di-load)
+    const { JSZip } = window; 
+
+    const startButton = document.getElementById("startButton");
+    const halamanInputEl = document.getElementById("halamanGanti");
+    const output = document.getElementById("output");
+    const utamaDropZone = document.getElementById("utamaDrop");
+    const sisipanDropZone = document.getElementById("sisipanDrop");
+
+    function setupDropzone(id, callback) {
+      const zone = document.getElementById(id);
+      zone.addEventListener("click", () => {
+        const input = document.createElement("input");
+        input.type = "file";
+        input.accept = "application/pdf";
+        input.multiple = true;
+        input.onchange = (e) => callback([...e.target.files]);
+        input.click();
+      });
+      zone.addEventListener("dragover", (e) => { e.preventDefault(); zone.classList.add("dragover"); });
+      zone.addEventListener("dragleave", () => zone.classList.remove("dragover"));
+      zone.addEventListener("drop", (e) => {
+        e.preventDefault();
+        zone.classList.remove("dragover");
+        callback([...e.dataTransfer.files]);
+      });
+    }
+
+    setupDropzone("utamaDrop", (files) => {
+      utamaFiles = files.filter(f => f.type === "application/pdf");
+      utamaDropZone.textContent = `✅ ${utamaFiles.length} PDF Utama dipilih`;
+      utamaDropZone.classList.add("has-file"); 
+      checkReadyState(); 
+    });
+
+    setupDropzone("sisipanDrop", (files) => {
+      sisipanFiles = files.filter(f => f.type === "application/pdf");
+      sisipanDropZone.textContent = `✅ ${sisipanFiles.length} PDF Sisipan dipilih`;
+      sisipanDropZone.classList.add("has-file"); 
+      checkReadyState(); 
+    });
+
+    halamanInputEl.addEventListener("input", checkReadyState);
+    startButton.addEventListener("click", checkAndMerge);
+
+    function checkReadyState() {
+      const halamanInput = halamanInputEl.value;
+
+      if (utamaFiles.length > 0 && sisipanFiles.length > 0) {
+        if (utamaFiles.length !== sisipanFiles.length) {
+          output.textContent = "⚠️ Jumlah PDF utama dan sisipan harus sama!";
+          output.className = "status-box status-error"; 
+          startButton.disabled = true;
+        } else if (halamanInput.trim() === "") {
+          output.textContent = "🔢 Mohon isi nomor halaman yang akan diganti.";
+          output.className = "status-box status-error"; 
+          startButton.disabled = true;
+        } else {
+          output.textContent = `✅ Siap memproses ${utamaFiles.length} file. Klik 'Mulai Proses'.`;
+          output.className = "status-box status-success"; 
+          startButton.disabled = false;
+        }
+      } else {
+        startButton.disabled = true;
+        if (utamaFiles.length === 0 && sisipanFiles.length === 0) {
+           output.textContent = "Menunggu input...";
+           output.className = "status-box"; 
+        }
+      }
+    }
+    
+    function resetUI() {
+        utamaFiles = [];
+        sisipanFiles = [];
+        
+        startButton.disabled = true; 
+        halamanInputEl.disabled = false;
+        
+        utamaDropZone.textContent = "Klik / Drop PDF Utama";
+        sisipanDropZone.textContent = "Klik / Drop PDF Sisipan";
+        utamaDropZone.classList.remove("has-file"); 
+        sisipanDropZone.classList.remove("has-file"); 
+        
+        output.textContent = "Menunggu input...";
+        output.className = "status-box"; 
+        
+        checkReadyState();
+    }
+
+    // BARU: Menambahkan fungsi download helper
+    function downloadBytes(bytes, filename, mimeType = 'application/pdf') {
+      const blob = new Blob([bytes], { type: mimeType });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+    }
+
+    async function checkAndMerge() {
+      startButton.disabled = true;
+      halamanInputEl.disabled = true;
+      output.textContent = "🚀 Memulai proses...";
+      output.className = "status-box status-processing"; 
+
+      if (utamaFiles.length === 0 || sisipanFiles.length === 0) {
+        output.textContent = "⚠️ Silakan pilih file PDF Utama dan Sisipan.";
+        output.className = "status-box status-error"; 
+        resetUI(); 
+        return;
+      }
+      // ... (validasi lainnya tetap sama) ...
+       if (utamaFiles.length !== sisipanFiles.length) {
+        output.textContent = "⚠️ Jumlah PDF utama dan sisipan harus sama!";
+        output.className = "status-box status-error"; 
+        resetUI(); 
+        return;
+      }
+
+      const halamanInput = halamanInputEl.value;
+      if (!halamanInput) {
+          output.textContent = "⚠️ Mohon isi nomor halaman yang akan diganti!";
+          output.className = "status-box status-error"; 
+          resetUI(); 
+          return;
+      }
+
+      const pagesToReplace = halamanInput
+        .split(',')
+        .map(s => parseInt(s.trim(), 10) - 1)
+        .filter(num => !isNaN(num) && num >= 0)
+        .sort((a, b) => a - b);
+
+      if (pagesToReplace.length === 0) {
+        output.textContent = "⚠️ Format nomor halaman tidak valid!";
+        output.className = "status-box status-error"; 
+        resetUI(); 
+        return;
+      }
+      
+      output.textContent = `🔧 Memproses penggantian halaman ${halamanInput}...`;
+      output.className = "status-box status-processing"; 
+      
+      // BARU: Membuat instance ZIP
+      const zip = new JSZip();
+      let allSuccess = true;
+
+      for (let i = 0; i < utamaFiles.length; i++) {
+        try {
+          const mainBuffer = await utamaFiles[i].arrayBuffer();
+          const insertBuffer = await sisipanFiles[i].arrayBuffer();
+
+          const mainPdf = await PDFDocument.load(mainBuffer);
+          const insertPdf = await PDFDocument.load(insertBuffer);
+
+          // ... (logika validasi halaman tetap sama) ...
+          if (insertPdf.getPageCount() < pagesToReplace.length) {
+            output.textContent = `❌ Gagal: PDF Sisipan ke-${i+1} hanya punya ${insertPdf.getPageCount()} halaman, butuh ${pagesToReplace.length}.`;
+            output.className = "status-box status-error"; 
+            allSuccess = false;
+            continue; 
+          }
+          const maxPage = Math.max(...pagesToReplace);
+          if (mainPdf.getPageCount() <= maxPage) {
+            output.textContent = `❌ Gagal: PDF Utama ke-${i+1} tidak punya halaman sampai nomor ${maxPage + 1}.`;
+            output.className = "status-box status-error"; 
+            allSuccess = false;
+            continue;
+          }
+          
+          const finalPdf = await PDFDocument.create();
+          const insertPageIndicesToCopy = Array.from({ length: pagesToReplace.length }, (_, k) => k);
+
+          const copiedMainPages = await finalPdf.copyPages(mainPdf, mainPdf.getPageIndices());
+          const copiedInsertPages = await finalPdf.copyPages(insertPdf, insertPageIndicesToCopy);
+          
+          let insertPageIndex = 0;
+          for (let pageIndex = 0; pageIndex < mainPdf.getPageCount(); pageIndex++) {
+            if (pagesToReplace.includes(pageIndex)) {
+              finalPdf.addPage(copiedInsertPages[insertPageIndex]);
+              insertPageIndex++;
+            } else {
+              finalPdf.addPage(copiedMainPages[pageIndex]);
+            }
+          }
+
+          const mergedPdfBytes = await finalPdf.save();
+          const originalName = utamaFiles[i].name.replace(/\.pdf$/i, "");
+          const finalName = `${originalName}.pdf`;
+
+          // BARU: Hapus logika unduh lama, ganti dengan menambah ke ZIP
+          zip.file(finalName, mergedPdfBytes);
+          
+          output.textContent = `✅ ${finalName} berhasil diproses (${i + 1}/${utamaFiles.length})`;
+          output.className = "status-box status-processing"; 
+          await new Promise(res => setTimeout(res, 50)); // Jeda kecil (opsional)
+
+        } catch (e) {
+          console.error(e);
+          output.textContent = `❌ Gagal memproses file ke-${i + 1}: ${e.message}`;
+          output.className = "status-box status-error"; 
+          allSuccess = false;
+        }
+      } // --- Akhir dari Loop For ---
+
+      // BARU: Logika untuk membuat dan mengunduh ZIP
+      const processedFileNames = Object.keys(zip.files);
+
+      if (processedFileNames.length === 0) {
+        output.textContent = allSuccess 
+            ? "❌ Tidak ada file yang dihasilkan (mungkin proses gagal di awal)." 
+            : `⚠️ Proses selesai dengan ${utamaFiles.length} kegagalan.`;
+        output.className = "status-box status-error";
+      } else {
+        output.textContent = "📦 Membuat file ZIP...";
+        output.className = "status-box status-processing";
+        
+        try {
+            const zipBlob = await zip.generateAsync({ type: "blob" });
+            downloadBytes(zipBlob, "hasil_ganti_halaman.zip", "application/zip");
+            
+            output.textContent = allSuccess 
+                ? `🎉 Sukses! ${processedFileNames.length} file ada di dalam ZIP.`
+                : `⚠️ Selesai. ${processedFileNames.length} file berhasil, namun beberapa gagal.`;
+            output.className = allSuccess ? "status-box status-success" : "status-box status-error";
+
+        } catch (e) {
+            output.textContent = `❌ Gagal membuat file ZIP: ${e.message}`;
+            output.className = "status-box status-error";
+        }
+      }
+        
+      resetUI();
+    }
+  </script>
+</body>
+</html>

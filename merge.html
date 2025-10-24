@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Perakitan PDF Canggih</title>
+  
+  <script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+
+  <link rel="stylesheet" href="style.css">
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+</head>
+<body>
+
+  <header class="page-header">
+    <a href="index.html" class="back-link">← Kembali ke Portal</a>
+    <h1>Perakitan PDF Canggih</h1>
+    <p>Gabungkan file PDF Utama dan Sisipan. Anda bisa mengatur halaman dan mengubah urutan slot sisipan.</p>
+  </header>
+
+  <main class="container">
+    <div class="card">
+      <div class="input-grid">
+        <div class="input-column">
+          <span class="label">🗂️ PDF Utama</span>
+          <div class="dropzone-wrapper">
+            <div id="utamaDropzone" class="dropzone">Klik atau Drop File</div>
+            <input type="text" class="input-field" id="utamaPageRange" placeholder="Halaman (cth: 1, 3-5). Kosongkan = semua.">
+          </div>
+        </div>
+        <div class="input-column">
+          <span class="label">🧩 PDF Sisipan (Seret untuk ubah urutan)</span>
+          <div id="sisipanContainer">
+            </div>
+        </div>
+      </div>
+    </div>
+    
+    <div class="card action-panel">
+      <div id="previewWrapper">
+        <div id="previewContainer"></div>
+      </div>
+      <div class="filename-container">
+        <label for="suffixInput" class="label" style="font-size: 1.1em; margin-bottom: 10px;">🏷️ Teks Tambahan Nama File (Opsional)</label>
+        <input type="text" id="suffixInput" class="input-field" placeholder="Contoh: - BAUT atau _Lengkap">
+      </div>
+    </div>
+    <button id="processButton" class="button-primary button-large">Rakit Semua PDF & Unduh .ZIP</button>
+    <div id="output" class="status-box">Menunggu file...</div>
+  </main>
+
+  <script>
+    // SEMUA JAVASCRIPT DARI file MergePDFv2.html ANDA
+    // (Tidak perlu diubah, salin & tempel langsung ke sini)
+
+    const { PDFDocument } = PDFLib;
+    const { JSZip } = window;
+
+    let utamaFiles = [];
+    let utamaPageRange = ''; 
+    let sisipanFiles = Array.from({ length: 10 }, () => []);
+    let sisipanPageRanges = Array.from({ length: 10 }, () => ''); 
+
+    const utamaDropzone = document.getElementById('utamaDropzone');
+    const utamaPageRangeInput = document.getElementById('utamaPageRange'); 
+    const sisipanContainer = document.getElementById('sisipanContainer');
+    const processButton = document.getElementById('processButton');
+    const output = document.getElementById('output');
+    const suffixInput = document.getElementById('suffixInput');
+    
+    // ---
+    // BARU: Fungsi untuk mem-parsing rentang halaman
+    // ---
+    function parsePageRanges(rangeStr, maxPages) {
+      if (!rangeStr || rangeStr.trim() === '') {
+        return Array.from({ length: maxPages }, (_, i) => i);
+      }
+      const indices = new Set();
+      const parts = rangeStr.split(',');
+      for (const part of parts) {
+        const trimmedPart = part.trim();
+        if (trimmedPart.includes('-')) {
+          const [start, end] = trimmedPart.split('-').map(Number);
+          if (isNaN(start) || isNaN(end) || start < 1 || end > maxPages || start > end) {
+            throw new Error(`Rentang halaman tidak valid: "${trimmedPart}" (Maks: ${maxPages})`);
+          }
+          for (let i = start; i <= end; i++) {
+            indices.add(i - 1); 
+          }
+        } else {
+          const pageNum = Number(trimmedPart);
+          if (isNaN(pageNum) || pageNum < 1 || pageNum > maxPages) {
+            throw new Error(`Nomor halaman tidak valid: "${trimmedPart}" (Maks: ${maxPages})`);
+          }
+          indices.add(pageNum - 1); 
+        }
+      }
+      if (indices.size === 0) {
+        throw new Error(`Rentang halaman "${rangeStr}" tidak menghasilkan halaman yang valid.`);
+      }
+      return Array.from(indices).sort((a, b) => a - b);
+    }
+
+    // Fungsi updatePreviewTable
+    function updatePreviewTable() {
+      const previewContainer = document.getElementById('previewContainer');
+      previewContainer.innerHTML = ''; 
+      if (utamaFiles.length === 0) return;
+      const suffixText = suffixInput.value;
+      const table = document.createElement('table');
+      table.id = 'previewTable';
+      const thead = document.createElement('thead');
+      thead.innerHTML = '<tr><th>No.</th><th>Nama File Hasil (Pratinjau)</th></tr>';
+      const tbody = document.createElement('tbody');
+      for (let i = 0; i < utamaFiles.length; i++) {
+        const tr = document.createElement('tr');
+        const originalName = utamaFiles[i].name.replace(/\.pdf$/i, "");
+        const finalNamePreview = `${originalName}${suffixText}.pdf`;
+        tr.innerHTML = `<td>${i + 1}</td><td>${finalNamePreview}</td>`;
+        tbody.appendChild(tr);
+      }
+      table.appendChild(thead);
+      table.appendChild(tbody);
+      previewContainer.appendChild(table);
+    }
+    suffixInput.addEventListener('input', updatePreviewTable);
+
+    // setupDropzone
+    function setupDropzone(element, filesContainer, index = -1) {
+      const wrapper = element.closest('.dropzone-wrapper');
+      const pageRangeInput = wrapper.querySelector('.input-field'); // Diubah ke .input-field
+
+      const handleClick = () => {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = 'application/pdf';
+        input.multiple = true;
+        input.onchange = (e) => handleFiles(e.target.files);
+        input.click();
+      };
+      
+      element.addEventListener('click', handleClick);
+      element.addEventListener('dragover', (e) => { e.preventDefault(); element.classList.add('dragover'); });
+      element.addEventListener('dragleave', () => element.classList.remove('dragover'));
+      element.addEventListener('drop', (e) => {
+        e.preventDefault();
+        element.classList.remove('dragover');
+        handleFiles(e.dataTransfer.files);
+      });
+
+      const handleFiles = (files) => {
+        const pdfFiles = [...files].filter(f => f.type === 'application/pdf');
+        if (pdfFiles.length === 0) return;
+        
+        if (index === -1) {
+          utamaFiles = pdfFiles;
+          element.textContent = `${utamaFiles.length} file Utama dipilih.`;
+          utamaPageRange = ''; 
+          pageRangeInput.value = ''; 
+        } else {
+          filesContainer[index] = pdfFiles;
+          element.textContent = `${pdfFiles.length} file di slot #${index + 1}`;
+          sisipanPageRanges[index] = ''; 
+          pageRangeInput.value = ''; 
+        }
+        element.classList.add('has-file');
+        updateStatus();
+      };
+      
+      if (pageRangeInput) {
+        pageRangeInput.addEventListener('input', () => {
+          if (index === -1) {
+            utamaPageRange = pageRangeInput.value;
+          } else {
+            sisipanPageRanges[index] = pageRangeInput.value;
+          }
+        });
+      }
+    }
+
+    // Membuat slot sisipan
+    for (let i = 0; i < 10; i++) {
+      const wrapper = document.createElement('div');
+      wrapper.className = 'dropzone-wrapper sisipan-dropzone-wrapper';
+      wrapper.draggable = true; 
+
+      const zone = document.createElement('div');
+      zone.className = 'dropzone sisipan-dropzone';
+      zone.textContent = `Slot Sisipan #${i + 1}`;
+      
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'input-field page-range-input'; // Diubah ke .input-field
+      input.placeholder = `Halaman (Slot #${i + 1})`;
+      
+      wrapper.appendChild(zone);
+      wrapper.appendChild(input);
+      sisipanContainer.appendChild(wrapper);
+
+      setupDropzone(zone, sisipanFiles, i);
+    }
+    
+    setupDropzone(utamaDropzone, utamaFiles);
+
+    // ---
+    // Logika Drag-and-drop
+    // ---
+    let draggingElement = null;
+    let dragOverElement = null;
+    
+    sisipanContainer.addEventListener('dragstart', (e) => {
+      const target = e.target.closest('.sisipan-dropzone-wrapper');
+      if (target) {
+        draggingElement = target;
+        draggingElement.classList.add('dragging');
+      }
+    });
+
+    sisipanContainer.addEventListener('dragend', () => {
+      if (draggingElement) {
+        draggingElement.classList.remove('dragging');
+      }
+      if (dragOverElement) {
+        dragOverElement.classList.remove('drag-over-item');
+      }
+      draggingElement = null;
+      dragOverElement = null;
+    });
+
+    sisipanContainer.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      const target = e.target.closest('.sisipan-dropzone-wrapper');
+      
+      if (target && target !== draggingElement) {
+        if (dragOverElement) {
+          dragOverElement.classList.remove('drag-over-item');
+        }
+        dragOverElement = target;
+        dragOverElement.classList.add('drag-over-item');
+      }
+    });
+
+    sisipanContainer.addEventListener('drop', (e) => {
+      e.preventDefault();
+      const target = e.target.closest('.sisipan-dropzone-wrapper');
+      
+      if (!draggingElement || !target || draggingElement === target) {
+        if (dragOverElement) dragOverElement.classList.remove('drag-over-item');
+        if (draggingElement) draggingElement.classList.remove('dragging');
+        draggingElement = null;
+        dragOverElement = null;
+        return;
+      }
+
+      const allWrappers = Array.from(sisipanContainer.children);
+      const fromIndex = allWrappers.indexOf(draggingElement);
+      const toIndex = allWrappers.indexOf(target);
+
+      if (fromIndex === -1 || toIndex === -1) return;
+
+      if (fromIndex < toIndex) {
+        target.after(draggingElement);
+      } else {
+        target.before(draggingElement);
+      }
+
+      function reorderArray(arr, oldIdx, newIdx) {
+        const item = arr.splice(oldIdx, 1)[0];
+        arr.splice(newIdx, 0, item);
+      }
+
+      reorderArray(sisipanFiles, fromIndex, toIndex);
+      reorderArray(sisipanPageRanges, fromIndex, toIndex);
+
+      Array.from(sisipanContainer.children).forEach((wrapper, newIndex) => {
+        const zone = wrapper.querySelector('.dropzone');
+        const input = wrapper.querySelector('.input-field'); // Diubah ke .input-field
+        const files = sisipanFiles[newIndex];
+        
+        if (files.length > 0) {
+          zone.textContent = `${files.length} file di slot #${newIndex + 1}`;
+        } else {
+          zone.textContent = `Slot Sisipan #${newIndex + 1}`;
+        }
+        input.placeholder = `Halaman (Slot #${newIndex + 1})`;
+      });
+
+      if (dragOverElement) dragOverElement.classList.remove('drag-over-item');
+      draggingElement.classList.remove('dragging');
+      draggingElement = null;
+      dragOverElement = null;
+      
+      updateStatus();
+    });
+
+    // updateStatus
+    function updateStatus() {
+      const activeSlots = sisipanFiles.filter(slot => slot.length > 0).length;
+      output.style.color = 'var(--text-color)';
+      output.textContent = `Terpilih: ${utamaFiles.length} file Utama | ${activeSlots} slot Sisipan terisi.`;
+      updatePreviewTable();
+    }
+
+    // processButton
+    processButton.addEventListener('click', async () => {
+      const activeSisipanData = sisipanFiles
+        .map((slot, index) => ({ 
+          slot, 
+          range: sisipanPageRanges[index],
+          originalIndex: index + 1 
+        }))
+        .filter(item => item.slot.length > 0);
+
+      if (utamaFiles.length === 0 || activeSisipanData.length === 0) {
+        output.className = 'status-box status-error';
+        output.textContent = '⚠️ Harap isi file Utama dan minimal satu slot Sisipan!';
+        return;
+      }
+      
+      const nUtama = utamaFiles.length;
+      for (const data of activeSisipanData) {
+        if (data.slot.length !== nUtama) {
+          output.className = 'status-box status-error';
+          output.textContent = `❌ Gagal! Jumlah file Utama (${nUtama}) tidak sama dengan jumlah file di Slot Sisipan (dari slot asli #${data.originalIndex}) yang berisi ${data.slot.length} file.`;
+          return;
+        }
+      }
+
+      const totalOutputFiles = nUtama;
+      output.className = 'status-box status-processing';
+      output.textContent = `✅ Validasi sukses. Akan merakit ${totalOutputFiles} file...`;
+
+      const zip = new JSZip();
+
+      for (let i = 0; i < totalOutputFiles; i++) {
+        const utamaFile = utamaFiles[i];
+        output.textContent = `🔧 Merakit file ke-${i + 1} dari ${totalOutputFiles} (${utamaFile.name})...`;
+        
+        try {
+          const newPdf = await PDFDocument.create();
+
+          // 1. Proses File Utama
+          const utamaBuffer = await utamaFile.arrayBuffer();
+          const utamaPdf = await PDFDocument.load(utamaBuffer);
+          const utamaPageCount = utamaPdf.getPageCount();
+          const utamaIndeks = parsePageRanges(utamaPageRange, utamaPageCount);
+          
+          const copiedUtamaPages = await newPdf.copyPages(utamaPdf, utamaIndeks);
+          copiedUtamaPages.forEach(page => newPdf.addPage(page));
+          
+          // 2. Proses File Sisipan
+          for (const data of activeSisipanData) {
+            const sisipanFile = data.slot[i];
+            const sisipanRangeString = data.range;
+            
+            const sisipanBuffer = await sisipanFile.arrayBuffer();
+            const sisipanPdf = await PDFDocument.load(sisipanBuffer);
+            const sisipanPageCount = sisipanPdf.getPageCount();
+            
+            const sisipanIndeks = parsePageRanges(sisipanRangeString, sisipanPageCount);
+            
+            if (sisipanIndeks.length > 0) {
+              const copiedSisipanPages = await newPdf.copyPages(sisipanPdf, sisipanIndeks);
+              copiedSisipanPages.forEach(page => newPdf.addPage(page));
+            }
+          }
+          
+          // 3. Simpan PDF ke ZIP
+          const pdfBytes = await newPdf.save();
+          const originalName = utamaFile.name.replace(/\.pdf$/i, "");
+          const finalName = `${originalName}${suffixInput.value}.pdf`;
+          
+          zip.file(finalName, pdfBytes);
+
+          await new Promise(res => setTimeout(res, 50)); 
+
+        } catch (e) {
+          console.error(`Gagal merakit file ke-${i+1}:`, e);
+          output.className = 'status-box status-error';
+          output.textContent = `❌ Gagal merakit file dari ${utamaFile.name}. Kesalahan: ${e.message}`;
+          return; 
+        }
+      }
+
+      // 4. Buat dan Unduh File ZIP
+      output.textContent = '📦 Membuat file ZIP...';
+      try {
+        const zipContent = await zip.generateAsync({ type: "blob" });
+        
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(zipContent);
+        const zipFileName = suffixInput.value ? `Hasil_Rakitan${suffixInput.value}.zip` : "Hasil_Rakitan_PDF.zip";
+        link.download = zipFileName;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        
+        output.className = 'status-box status-success';
+        output.textContent = `🎉 Selesai! ${totalOutputFiles} file berhasil dirakit dan diunduh dalam 1 file ZIP.`;
+      
+      } catch (e) {
+        output.className = 'status-box status-error';
+        output.textContent = `❌ Gagal membuat file ZIP. Kesalahan: ${e.message}`;
+      }
+    });
+  </script>
+</body>
+</html>

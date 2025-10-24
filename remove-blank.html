@@ -1,0 +1,345 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Hapus Halaman Kosong — Batch PDF</title>
+  
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+  <script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+
+  <link rel="stylesheet" href="style.css">
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+</head>
+<body>
+
+  <header class="page-header">
+    <a href="index.html" class="back-link">← Kembali ke Portal</a>
+    <h1>Hapus Halaman Kosong PDF</h1>
+    <p>Deteksi, pratinjau, dan hapus halaman kosong. Hasil akan otomatis disimpan sebagai .zip.</p>
+  </header>
+
+  <main class="container">
+    <div class="card">
+      <div id="drop" class="dropzone">Tarik & taruh file PDF di sini, atau klik untuk pilih file</div>
+      <input id="fileInput" type="file" accept="application/pdf" multiple style="display: none;" />
+      
+      <label for="suffix" class="setting-label">Akhiran Nama File (Opsional)</label>
+      <input type="text" id="suffix" class="input-field" placeholder="Contoh: _diproses">
+      
+      <hr />
+      
+      <div id="fileList">
+        <p style="text-align:center; color: #888;">Belum ada file yang dipilih.</p>
+      </div>
+      
+      <div class="start-container">
+        <button id="start" class="button-primary button-large" disabled>Proses dan Simpan ke ZIP</button>
+      </div>
+    </div>
+  </main>
+
+  <div id="previewModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 id="modalTitle">Pratinjau Halaman</h2>
+        <span class="modal-close">&times;</span>
+      </div>
+      <p id="modalInfo">Halaman yang ditandai merah akan dihapus berdasarkan ambang batas saat ini. (Skala pratinjau mungkin berbeda dari deteksi)</p>
+      <div id="modalBody">
+        </div>
+    </div>
+  </div>
+
+  <script>
+    // Konfigurasi worker
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+    
+    const HIDDEN_THRESHOLD = 0.995; // 99.5% Putih
+
+    // Ambil elemen DOM
+    const fileInput = document.getElementById('fileInput');
+    const drop = document.getElementById('drop');
+    const fileListEl = document.getElementById('fileList');
+    const startBtn = document.getElementById('start');
+    const suffixEl = document.getElementById('suffix');
+    
+    const previewModal = document.getElementById('previewModal');
+    const modalClose = document.querySelector('.modal-close');
+    const modalBody = document.getElementById('modalBody');
+    const modalTitle = document.getElementById('modalTitle');
+
+    let files = [];
+    let isProcessing = false;
+
+    // Event listener Drag & Drop
+    drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('dragover'); });
+    drop.addEventListener('dragleave', e => { e.preventDefault(); drop.classList.remove('dragover'); });
+    drop.addEventListener('drop', e => {
+      e.preventDefault();
+      drop.classList.remove('dragover');
+      handleFiles(e.dataTransfer.files);
+    });
+    
+    drop.addEventListener('click', () => {
+      if (isProcessing) return;
+      fileInput.click();
+    });
+    
+    fileInput.addEventListener('change', e => {
+      handleFiles(e.target.files);
+    });
+    
+    function handleFiles(fileListObj) {
+      if (isProcessing) {
+        alert("Harap tunggu proses saat ini selesai sebelum menambah file baru.");
+        return;
+      }
+      
+      const newFiles = Array.from(fileListObj).filter(f => f.type === 'application/pdf');
+      if (newFiles.length === 0) return;
+      files = files.concat(newFiles);
+      renderFileList();
+    }
+
+    function renderFileList() {
+      if (files.length === 0) {
+        fileListEl.innerHTML = '<p style="text-align:center; color: #888;">Belum ada file yang dipilih.</p>';
+        startBtn.disabled = true;
+        return;
+      }
+      
+      fileListEl.innerHTML = '';
+      files.forEach((f, i) => {
+        const div = document.createElement('div');
+        div.className = 'file-item';
+        div.innerHTML = `
+          <div class="file-info">
+            <span class="file-name" title="${escapeHtml(f.name)}">${i + 1}. ${escapeHtml(f.name)}</span>
+            <span class="file-size">${(f.size / 1024 / 1024).toFixed(2)} MB</span>
+          </div>
+          <div class="file-controls">
+            <span id="status-${i}" class="file-status pending">Menunggu...</span>
+            <button class="button-secondary btn-preview" data-index="${i}">Pratinjau</button>
+          </div>
+        `;
+        fileListEl.appendChild(div);
+      });
+      
+      document.querySelectorAll('.btn-preview').forEach(btn => {
+        btn.addEventListener('click', handlePreviewClick);
+      });
+      
+      startBtn.disabled = false;
+    }
+
+    function escapeHtml(s) {
+      return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+    
+    // --- FITUR PRATINJAU ---
+    modalClose.onclick = () => { previewModal.style.display = 'none'; };
+    window.onclick = (e) => {
+      if (e.target == previewModal) previewModal.style.display = 'none';
+    };
+
+    async function handlePreviewClick(e) {
+      const index = parseInt(e.target.dataset.index, 10);
+      const file = files[index];
+      const threshold = HIDDEN_THRESHOLD; 
+
+      modalTitle.textContent = `Pratinjau: ${escapeHtml(file.name)}`;
+      modalBody.innerHTML = '<div class="loader"></div>';
+      previewModal.style.display = 'block';
+
+      try {
+        const arrayBuf = await file.arrayBuffer();
+        const loadingTask = pdfjsLib.getDocument({ data: arrayBuf });
+        const pdfjsDoc = await loadingTask.promise;
+        const pageCount = pdfjsDoc.numPages;
+        
+        const pageElements = [];
+        
+        for (let p = 0; p < pageCount; p++) {
+          const whiteRatio = await isPageBlank(pdfjsDoc, p, 0.2);
+          const isDeleted = whiteRatio >= threshold;
+          const pageEl = await createPageThumbnail(pdfjsDoc, p, isDeleted);
+          pageElements.push(pageEl);
+        }
+        
+        modalBody.innerHTML = '';
+        pageElements.forEach(el => modalBody.appendChild(el));
+        
+      } catch (err) {
+        modalBody.innerHTML = `<p style="color:var(--danger-color)">Gagal memuat pratinjau: ${err.message}</p>`;
+      }
+    }
+
+    async function createPageThumbnail(pdfjsDoc, pageIndex, isDeleted) {
+      const page = await pdfjsDoc.getPage(pageIndex + 1);
+      const viewport = page.getViewport({ scale: 0.3 });
+      
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.floor(viewport.width);
+      canvas.height = Math.floor(viewport.height);
+      const ctx = canvas.getContext('2d');
+      await page.render({ canvasContext: ctx, viewport }).promise;
+      
+      const wrapper = document.createElement('div');
+      wrapper.className = 'page-preview';
+      if (isDeleted) {
+        wrapper.classList.add('deleted');
+      }
+      wrapper.innerHTML = `<span>Hal ${pageIndex + 1}</span>`;
+      wrapper.appendChild(canvas);
+      return wrapper;
+    }
+    
+    // --- FUNGSI PROSES INTI ---
+    async function isPageBlank(pdfDoc, pageIndex, sampleScale = 0.2) {
+      const page = await pdfDoc.getPage(pageIndex + 1); 
+      const viewport = page.getViewport({ scale: sampleScale });
+      const canvasWidth = Math.max(1, Math.floor(viewport.width));
+      const canvasHeight = Math.max(1, Math.floor(viewport.height));
+      if (canvasWidth === 0 || canvasHeight === 0) return 0;
+      
+      const canvas = document.createElement('canvas');
+      canvas.width = canvasWidth;
+      canvas.height = canvasHeight;
+      const ctx = canvas.getContext('2d');
+      
+      await page.render({ canvasContext: ctx, viewport }).promise;
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+      
+      let nonWhite = 0;
+      const total = canvas.width * canvas.height;
+      if (total === 0) return 0; 
+
+      for (let i = 0; i < imageData.length; i += 4) {
+        if (!(imageData[i] > 250 && imageData[i+1] > 250 && imageData[i+2] > 250)) {
+          nonWhite++;
+        }
+      }
+      return 1 - (nonWhite / total);
+    }
+
+    // Tombol START
+    startBtn.addEventListener('click', async () => {
+      if (files.length === 0) { alert('Pilih file terlebih dahulu.'); return; }
+      if (isProcessing) return;
+
+      isProcessing = true; 
+      
+      const threshold = HIDDEN_THRESHOLD; 
+      const suffix = suffixEl.value;
+      
+      const controlsToDisable = [startBtn, suffixEl, ...document.querySelectorAll('.btn-preview')];
+      controlsToDisable.forEach(el => el.disabled = true);
+      drop.style.cursor = 'not-allowed';
+      drop.classList.remove('dragover');
+
+      const { PDFDocument } = PDFLib;
+      let zip = new JSZip(); 
+
+      try {
+        for (let fIndex = 0; fIndex < files.length; fIndex++) {
+          const file = files[fIndex];
+          const statusEl = document.getElementById(`status-${fIndex}`);
+          
+          statusEl.textContent = 'Memproses... ⏳';
+          statusEl.className = 'file-status processing';
+
+          try {
+            const arrayBuf = await file.arrayBuffer();
+            const loadingTask = pdfjsLib.getDocument({ data: arrayBuf });
+            const pdfjsDoc = await loadingTask.promise;
+            const pageCount = pdfjsDoc.numPages;
+            
+            const pagesToKeep = [];
+            for (let p = 0; p < pageCount; p++) {
+              const whiteRatio = await isPageBlank(pdfjsDoc, p, 0.2); 
+              if (whiteRatio < threshold) {
+                pagesToKeep.push(p);
+              }
+            }
+            
+            const srcDoc = await PDFDocument.load(arrayBuf);
+            const newDoc = await PDFDocument.create();
+            
+            if (pagesToKeep.length > 0) {
+                const copied = await newDoc.copyPages(srcDoc, pagesToKeep);
+                copied.forEach(pg => newDoc.addPage(pg));
+                const newBytes = await newDoc.save();
+                const outName = file.name.replace(/\.pdf$/i, '') + suffix + '.pdf';
+                zip.file(outName, newBytes);
+                statusEl.textContent = 'Selesai! ✅';
+                statusEl.className = 'file-status success';
+            } else {
+                statusEl.textContent = 'Kosong 0️⃣';
+                statusEl.className = 'file-status pending';
+            }
+            
+          } catch (err) {
+            console.error(err);
+            statusEl.textContent = 'Gagal! ❌';
+            statusEl.className = 'file-status error';
+          }
+        } // Akhir loop file
+
+        // --- DIUBAH: Logika Simpan Hasil ---
+        console.log("Memeriksa hasil proses...");
+        
+        const processedFileNames = Object.keys(zip.files);
+        
+        if (processedFileNames.length === 0) {
+          // Tidak ada file yang berhasil diproses atau semua hasilnya kosong
+          console.log("Tidak ada file yang dihasilkan.");
+          alert("Proses selesai, tetapi tidak ada halaman yang tersisa untuk disimpan.");
+        
+        } else if (processedFileNames.length === 1 && files.length === 1) {
+          // PENINGKATAN UX: Hanya 1 file diunggah DAN 1 file diproses.
+          // Unduh sebagai PDF, bukan ZIP.
+          console.log("Hanya 1 file, mengunduh sebagai PDF...");
+          const fileName = processedFileNames[0];
+          const pdfBytes = await zip.file(fileName).async("uint8array");
+          downloadBytes(pdfBytes, fileName, 'application/pdf');
+        
+        } else {
+          // Standar: Lebih dari 1 file diproses, ATAU 1 file diproses dari
+          // batch > 1 file. Buat ZIP.
+          console.log(`Membuat file ZIP berisi ${processedFileNames.length} file...`);
+          const zipBlob = await zip.generateAsync({ type: "blob" });
+          const zipName = suffix ? `hasil${suffix}.zip` : "hasil_proses.zip";
+          downloadBytes(zipBlob, zipName, 'application/zip');
+        }
+        // --- Akhir dari Logika Simpan Hasil ---
+
+      } finally {
+        controlsToDisable.forEach(el => el.disabled = false);
+        isProcessing = false;
+        drop.style.cursor = 'pointer';
+        console.log('Selesai memproses semua file.');
+        
+        files = [];
+        renderFileList();
+        console.log('Daftar file dibersihkan secara otomatis.');
+      }
+    });
+
+    // Fungsi unduh
+    function downloadBytes(bytes, filename, mimeType = 'application/pdf') {
+      const blob = new Blob([bytes], { type: mimeType });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+    }
+
+  </script>
+</body>
+</html>

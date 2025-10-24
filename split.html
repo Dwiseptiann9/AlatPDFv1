@@ -1,0 +1,339 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Pisah PDF (Kode Unik)</title>
+  
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+  <script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+
+  <link rel="stylesheet" href="style.css">
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+</head>
+<body>
+
+  <header class="page-header">
+    <a href="index.html" class="back-link">← Kembali ke Portal</a>
+    <h1>Pisah PDF (Kode Unik)</h1>
+    <p>Pisahkan PDF besar (misal: hasil mail merge) berdasarkan daftar kode unik dari file .txt.</p>
+  </header>
+
+  <main class="container">
+    <div class="card">
+      
+      <label class="setting-label">1. PDF Besar yang Akan Dipisah</label>
+      <div id="pdfDrop" class="dropzone">Klik / Drop 1 File PDF</div>
+     
+      <label class="setting-label">2. File Teks (.txt) berisi Kode Unik</label>
+      <div id="txtDrop" class="dropzone">Klik / Drop 1 File .txt</div>
+      
+    </div>
+    
+    <div id="fileListContainer">
+      </div>
+
+    <button id="startButton" class="button-primary button-large" disabled>Mulai Proses Pemisahan</button>
+    <div id="output" class="status-box">Menunggu file...</div>
+    
+  </main>
+
+  <script>
+    // Konfigurasi worker untuk pdf.js
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+    
+    const { PDFDocument } = PDFLib;
+    const { JSZip } = window;
+    
+    // Ambil elemen DOM
+    const pdfDropZone = document.getElementById('pdfDrop');
+    const txtDropZone = document.getElementById('txtDrop');
+    const startButton = document.getElementById('startButton');
+    const output = document.getElementById('output');
+    const fileListContainer = document.getElementById('fileListContainer');
+
+    // Tempat penyimpanan file
+    let pdfFile = null;
+    let txtFile = null;
+    let pdfFileBuffer = null; 
+    let isProcessing = false;
+
+    // --- 1. Pengaturan Dropzone (Sudah diperbaiki sebelumnya) ---
+    function setupDropzone(element, expectedMimeType, callback) {
+      const handleFile = (file) => {
+        if (!file) return;
+        const isValidType = file.type === expectedMimeType || (expectedMimeType === "text/plain" && file.name.endsWith(".txt"));
+        if (isValidType) {
+          callback(file);
+        } else {
+          alert(`File tidak valid. Harap pilih atau drop file ${expectedMimeType}`);
+        }
+      };
+      const clickHandler = () => { /* ... (kode sama) ... */
+        if (isProcessing) return;
+        const input = document.createElement("input");
+        input.type = "file";
+        input.accept = expectedMimeType;
+        input.multiple = false;
+        input.onchange = (e) => handleFile(e.target.files[0]);
+        input.click();
+      };
+      const dragOverHandler = (e) => { /* ... (kode sama) ... */
+          e.preventDefault(); 
+          if (!isProcessing) element.classList.add("dragover"); 
+      };
+      const dragLeaveHandler = () => element.classList.remove("dragover");
+      const dropHandler = (e) => { /* ... (kode sama) ... */
+        e.preventDefault();
+        if (isProcessing) return;
+        element.classList.remove("dragover");
+        handleFile(e.dataTransfer.files[0]);
+      };
+      element.removeEventListener("click", clickHandler);
+      element.removeEventListener("dragover", dragOverHandler);
+      element.removeEventListener("dragleave", dragLeaveHandler);
+      element.removeEventListener("drop", dropHandler);
+      element.addEventListener("click", clickHandler);
+      element.addEventListener("dragover", dragOverHandler);
+      element.addEventListener("dragleave", dragLeaveHandler);
+      element.addEventListener("drop", dropHandler);
+    }
+    setupDropzone(pdfDropZone, "application/pdf", async (file) => { /* ... (kode sama) ... */
+        try {
+            output.textContent = "Membaca file PDF...";
+            output.className = "status-box status-processing";
+            pdfFileBuffer = await file.arrayBuffer();
+            pdfFile = file;
+            pdfDropZone.textContent = `✅ File PDF: ${file.name}`;
+            pdfDropZone.classList.add("has-file");
+            checkReadyState();
+        } catch (e) {
+            output.textContent = "Gagal membaca file PDF.";
+            output.className = "status-box status-error";
+            alert("Gagal membaca file PDF: " + e.message);
+            resetUI();
+        }
+    });
+    setupDropzone(txtDropZone, "text/plain", (file) => { /* ... (kode sama) ... */
+        txtFile = file;
+        txtDropZone.textContent = `✅ File Teks: ${file.name}`;
+        txtDropZone.classList.add("has-file");
+        checkReadyState();
+    });
+    function checkReadyState() { /* ... (kode sama) ... */
+        if (pdfFile && txtFile) {
+            output.textContent = "✅ Siap memisahkan PDF berdasarkan file teks.";
+            output.className = "status-box status-success";
+            startButton.disabled = false;
+        } else {
+             if (!pdfFile && !txtFile) output.textContent = "Menunggu file PDF dan file .txt...";
+             else if (!pdfFile) output.textContent = "Menunggu file PDF...";
+             else output.textContent = "Menunggu file .txt...";
+             output.className = "status-box";
+             startButton.disabled = true;
+        }
+    }
+    function resetUI() { /* ... (kode sama) ... */
+        pdfFile = null; txtFile = null; pdfFileBuffer = null; isProcessing = false;
+        pdfDropZone.textContent = "Klik / Drop 1 File PDF";
+        txtDropZone.textContent = "Klik / Drop 1 File .txt";
+        pdfDropZone.classList.remove("has-file"); txtDropZone.classList.remove("has-file");
+        fileListContainer.innerHTML = ''; 
+        startButton.disabled = true;
+        output.textContent = "Menunggu file..."; output.className = "status-box";
+    }
+
+    // --- 2. Logika Inti Pemisahan ---
+    
+    // Alur startButton (Tidak berubah)
+    startButton.addEventListener('click', async () => { /* ... (kode sama, lihat di bawah) ... */
+        if (isProcessing || !pdfFile || !txtFile || !pdfFileBuffer) return;
+        isProcessing = true; startButton.disabled = true; fileListContainer.innerHTML = ''; 
+        output.textContent = "🚀 Memulai proses... Harap tunggu."; output.className = "status-box status-processing";
+        let pdfjsDoc;
+        try {
+            output.textContent = `Membaca file .txt... (Langkah 1 dari 5)`;
+            const uniqueCodes = await readTxtFile(txtFile);
+            if (uniqueCodes.length === 0) throw new Error("File .txt kosong atau tidak berisi baris teks yang valid.");
+            
+            output.textContent = `Membaca file PDF... (Langkah 2 dari 5)`;
+            const pdfjsData = pdfFileBuffer.slice(0); 
+            const loadingTask = pdfjsLib.getDocument({ data: pdfjsData });
+            pdfjsDoc = await loadingTask.promise;
+            const totalPageCount = pdfjsDoc.numPages;
+
+            output.textContent = `Memindai ${totalPageCount} halaman... (Langkah 3 dari 5)`;
+            console.log("--- MULAI MEMINDAI PDF ---"); // Log Awal Pemindaian
+            const pageMap = await createSplitMap(pdfjsDoc, uniqueCodes);
+            console.log("--- SELESAI MEMINDAI PDF ---"); // Log Akhir Pemindaian
+            
+            if (pageMap.length === 0) throw new Error("Tidak ada satupun kode unik yang ditemukan di dalam PDF. Periksa Console Log (F12) untuk detail.");
+            
+            output.textContent = `Rencana pemisahan dibuat. ${pageMap.length} kode ditemukan. (Langkah 4 dari 5)`;
+            renderPreviewList(pageMap, totalPageCount); 
+
+            output.textContent = `Mulai memotong ${pageMap.length} file... (Langkah 5 dari 5)`;
+            const zip = await splitPdfDocuments(pdfFileBuffer, pageMap, totalPageCount);
+            
+            // Cek apakah ada file yang berhasil dibuat di ZIP
+            const processedFileNames = Object.keys(zip.files);
+            if (processedFileNames.length === 0) {
+                 throw new Error("Proses pemotongan selesai, tetapi tidak ada file PDF yang berhasil dibuat. Kemungkinan ada error saat menyimpan.");
+            }
+
+            output.textContent = `📦 Membuat file ZIP...`;
+            const zipBlob = await zip.generateAsync({ type: "blob" });
+            const zipName = pdfFile.name.replace(/\.pdf$/i, '') + "_terpisah.zip";
+            downloadBytes(zipBlob, zipName, "application/zip");
+            
+            output.textContent = `🎉 Selesai! ${processedFileNames.length} file PDF berhasil dibuat di dalam .ZIP.`;
+            output.className = "status-box status-success";
+
+        } catch (err) {
+            console.error("Kesalahan Utama:", err); // Log error utama
+            output.textContent = `❌ Gagal! Kesalahan: ${err.message}`;
+            output.className = "status-box status-error";
+        } finally {
+            isProcessing = false; startButton.disabled = false;
+            // Reset sebagian agar pengguna bisa coba lagi
+            pdfFile = null; txtFile = null; pdfFileBuffer = null;
+            pdfDropZone.textContent = "Klik / Drop 1 File PDF";
+            txtDropZone.textContent = "Klik / Drop 1 File .txt";
+            pdfDropZone.classList.remove("has-file"); txtDropZone.classList.remove("has-file");
+            startButton.disabled = true; 
+        }
+    });
+
+    // --- 3. Fungsi Helper ---
+
+    // Helper 1: Membaca file .txt (Tidak berubah)
+    function readTxtFile(file) { /* ... (kode sama) ... */
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const text = e.target.result;
+                const lines = text.split(/[\r\n]+/).map(line => line.trim()).filter(line => line.length > 0); 
+                resolve(lines);
+            };
+            reader.onerror = (e) => reject(e);
+            reader.readAsText(file);
+        });
+    }
+    
+    // Helper 2: Peta Pemisahan (DIPERBARUI dengan Normalisasi & Logging)
+    async function createSplitMap(pdfjsDoc, uniqueCodes) {
+        const pageCount = pdfjsDoc.numPages;
+        const pageMap = [];
+        const foundCodes = new Set();
+
+        // Normalisasi lebih agresif: HAPUS SEMUA SPASI dan lowercase
+        const normalize = (str) => str.replace(/\s/g, '').toLowerCase();
+
+        // Pre-normalize kode unik
+        const normalizedUniqueCodes = uniqueCodes.map(code => ({
+            original: code,
+            normalized: normalize(code)
+        }));
+
+        console.log("--- Normalisasi Kode Unik dari TXT ---");
+        normalizedUniqueCodes.forEach(c => console.log(`  [${c.normalized}] (dari: ${c.original})`));
+        console.log("-------------------------------------");
+
+        // Loop halaman PDF
+        for (let i = 1; i <= pageCount; i++) {
+            const page = await pdfjsDoc.getPage(i);
+            const textContent = await page.getTextContent();
+            // Gabungkan item TANPA spasi tambahan
+            const pageText = textContent.items.map(item => item.str).join(''); 
+            const normalizedPageText = normalize(pageText); // Normalisasi teks halaman
+
+            // --- Logging untuk Debugging ---
+            console.log(`--- Halaman ${i} ---`);
+            // console.log("Teks Asli (Joined):", pageText); // Aktifkan jika perlu
+            console.log("Teks Normalisasi Halaman:", normalizedPageText);
+            // --- End Logging ---
+
+            // Loop kode unik dari file TXT
+            for (const codeEntry of normalizedUniqueCodes) {
+                // Bandingkan versi normalisasi
+                if (!foundCodes.has(codeEntry.original) && normalizedPageText.includes(codeEntry.normalized)) {
+                    // --- Logging Saat Match Ditemukan ---
+                    console.log(`   ---> MATCH Ditemukan: Kode [${codeEntry.normalized}] ditemukan di halaman ${i}.`);
+                    // --- End Logging ---
+                    pageMap.push({
+                        code: codeEntry.original, // Simpan kode asli untuk nama file
+                        page: i      // Nomor halaman (1-based)
+                    });
+                    foundCodes.add(codeEntry.original); 
+                }
+            }
+             console.log(`---------------------`); // Pemisah antar halaman di log
+        }
+        pageMap.sort((a, b) => a.page - b.page); // Urutkan berdasarkan halaman
+        return pageMap; 
+    }
+    
+    // Helper 3: Menampilkan Pratinjau (Tidak berubah)
+    function renderPreviewList(pageMap, totalPageCount) { /* ... (kode sama) ... */
+        fileListContainer.innerHTML = ''; 
+        for (let i = 0; i < pageMap.length; i++) {
+            const currentEntry = pageMap[i]; const startPage = currentEntry.page;
+            let endPage; const isLastEntry = (i === pageMap.length - 1);
+            if (isLastEntry) { endPage = totalPageCount; } else { endPage = pageMap[i + 1].page - 1; }
+            if (endPage < startPage) { endPage = startPage; }
+            const div = document.createElement('div'); div.className = 'file-item';
+            div.innerHTML = `
+              <div class="file-info">
+                <span class="file-name" title="${escapeHtml(currentEntry.code)}">${i + 1}. ${escapeHtml(currentEntry.code)}.pdf</span>
+                <span class="file-size">Halaman ${startPage} - ${endPage}</span>
+              </div>
+              <div class="file-controls"> <span id="status-${i}" class="file-status pending">Menunggu...</span> </div>`;
+            fileListContainer.appendChild(div);
+        }
+    }
+    
+    // Helper 4: Memotong PDF (pdf-lib) (Tidak berubah)
+    async function splitPdfDocuments(pdfData, pageMap, totalPageCount) { /* ... (kode sama) ... */
+        const pdfDoc = await PDFDocument.load(pdfData.slice(0)); 
+        const zip = new JSZip();
+        for (let i = 0; i < pageMap.length; i++) {
+            const currentEntry = pageMap[i]; const statusEl = document.getElementById(`status-${i}`);
+            try {
+                if (statusEl) { statusEl.textContent = 'Memproses... ⏳'; statusEl.className = 'file-status processing'; }
+                const startPage = currentEntry.page; let endPage; const isLastEntry = (i === pageMap.length - 1);
+                if (isLastEntry) { endPage = totalPageCount; } else { endPage = pageMap[i + 1].page - 1; }
+                if (endPage < startPage) { endPage = startPage; }
+                const newDoc = await PDFDocument.create();
+                const pageIndicesToCopy = [];
+                for (let p = startPage; p <= endPage; p++) { pageIndicesToCopy.push(p - 1); }
+                if (pageIndicesToCopy.length === 0) throw new Error("Rentang halaman kosong.");
+                const copiedPages = await newDoc.copyPages(pdfDoc, pageIndicesToCopy);
+                copiedPages.forEach(page => newDoc.addPage(page));
+                const newBytes = await newDoc.save();
+                zip.file(`${currentEntry.code}.pdf`, newBytes);
+                if (statusEl) { statusEl.textContent = '✅ Selesai'; statusEl.className = 'file-status success'; }
+            } catch (err) {
+                 console.error(`Gagal memproses file: ${currentEntry.code}`, err);
+                 if (statusEl) { statusEl.textContent = '❌ Gagal'; statusEl.className = 'file-status error'; }
+            }
+        }
+        return zip;
+    }
+
+    // Helper 5: Fungsi unduh (Tidak berubah)
+    function downloadBytes(bytes, filename, mimeType = 'application/pdf') { /* ... (kode sama) ... */
+      const blob = new Blob([bytes], { type: mimeType }); const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = filename;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+    }
+    
+    // Helper 6: Escape HTML (Tidak berubah)
+    function escapeHtml(s) { /* ... (kode sama) ... */
+      return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+  </script>
+</body>
+</html>
