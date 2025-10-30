@@ -50,7 +50,7 @@
 
   <script>
     const { PDFDocument } = PDFLib;
-    const { JSZip } = window; // Ambil JSZip
+    const { JSZip } = window;
 
     // --- Variabel Global ---
     let pdfFiles = [];
@@ -63,7 +63,7 @@
     const previewContainer = document.getElementById('previewContainer');
     const previewCard = document.getElementById('previewCard');
     
-    // --- BARU: Fungsi Reset UI ---
+    // --- Fungsi Reset UI ---
     function resetUI() {
         pdfFiles = [];
         isProcessing = false;
@@ -89,7 +89,7 @@
           return;
       }
       
-      previewCard.style.display = 'block'; // Tampilkan kartu pratinjau
+      previewCard.style.display = 'block';
       const suffixText = suffixInput.value;
       const table = document.createElement('table');
       table.id = 'previewTable';
@@ -106,21 +106,24 @@
       table.appendChild(tbody);
       previewContainer.appendChild(table);
     }
-    suffixInput.addEventListener('input', updatePreviewTable);
+    suffixInput.addEventListener('input', () => {
+        updatePreviewTable();
+        updateStatus(); // Panggil updateStatus juga
+    });
 
-    // --- Pengaturan Dropzone ---
+    // --- Pengaturan Dropzone (DIPERBAIKI) ---
     function setupDropzone(element, filesContainer) {
       const handleFiles = (files) => {
         if (isProcessing) return;
         const newPdfFiles = [...files].filter(f => f.type === 'application/pdf');
         if (newPdfFiles.length === 0) return;
         
-        filesContainer.length = 0; // Kosongkan array
-        filesContainer.push(...newPdfFiles); // Isi dengan file baru
+        filesContainer.length = 0; 
+        filesContainer.push(...newPdfFiles); 
         
         element.textContent = `${filesContainer.length} file PDF dipilih.`;
         element.classList.add('has-file');
-        updateStatus();
+        updateStatus(); // Panggil updateStatus
       };
       
       const handleClick = () => {
@@ -150,17 +153,30 @@
     
     setupDropzone(pdfDropzone, pdfFiles);
 
-    // --- Update Status ---
+    // --- Update Status (DIPERBAIKI) ---
     function updateStatus() {
+      // Hanya panggil update tabel pratinjau jika ada file
       if (pdfFiles.length > 0) {
-        output.className = 'status-box'; // Reset status
-        output.textContent = `Terpilih: ${pdfFiles.length} file PDF. Siap diproses.`;
-        processButton.disabled = false; // Aktifkan tombol
-      } else {
-        output.textContent = 'Menunggu file...';
-        processButton.disabled = true; // Nonaktifkan tombol
+          updatePreviewTable();
       }
-      updatePreviewTable();
+      
+      const pagesStr = pagesToKeepInput.value.trim();
+      
+      if (pdfFiles.length > 0 && pagesStr !== "") {
+        // Keduanya terisi
+        output.className = 'status-box status-success';
+        output.textContent = `Siap memproses ${pdfFiles.length} file.`;
+        processButton.disabled = false;
+      } else {
+        // Salah satu atau keduanya kosong
+        processButton.disabled = true;
+        output.className = 'status-box';
+        if (pdfFiles.length === 0) {
+          output.textContent = 'Menunggu file...';
+        } else {
+          output.textContent = 'Menunggu nomor halaman...'; // Lebih spesifik
+        }
+      }
     }
     
     // Panggil updateStatus saat input halaman berubah
@@ -191,7 +207,7 @@
       return Array.from(indices).sort((a, b) => a - b);
     }
     
-    // --- BARU: Fungsi Unduh ---
+    // --- Fungsi Unduh ---
     function downloadBytes(bytes, filename, mimeType = 'application/pdf') {
       const blob = new Blob([bytes], { type: mimeType });
       const url = URL.createObjectURL(blob);
@@ -204,7 +220,7 @@
       setTimeout(() => URL.revokeObjectURL(url), 60000);
     }
 
-    // --- Logika Proses Utama (DIPERBARUI DENGAN JSZIP & RESET) ---
+    // --- Logika Proses Utama (DIPERBAIKI) ---
     processButton.addEventListener('click', async () => {
       const pagesToKeepStr = pagesToKeepInput.value;
       
@@ -213,7 +229,7 @@
       processButton.disabled = true;
 
       try {
-        // 1. Validasi Input
+        // 1. Validasi Input (sudah ditangani oleh updateStatus, tapi cek lagi)
         if (pdfFiles.length === 0) {
           throw new Error('Harap pilih file PDF terlebih dahulu!');
         }
@@ -236,7 +252,8 @@
           
           try {
             const newPdf = await PDFDocument.create();
-            const buffer = await file.arrayBuffer();
+            // BACA BUFFER DI SINI (HANYA SEKALI)
+            const buffer = await file.arrayBuffer(); 
             const existingPdf = await PDFDocument.load(buffer);
             const totalPages = existingPdf.getPageCount();
 
@@ -244,7 +261,7 @@
             
             if (validIndicesToKeep.length === 0) {
               console.warn(`Tidak ada halaman yang disimpan untuk file ${file.name}. Melewati file.`);
-              continue; // Lanjut ke file berikutnya
+              continue; 
             }
             
             const copiedPages = await newPdf.copyPages(existingPdf, validIndicesToKeep);
@@ -260,13 +277,13 @@
 
           } catch (e) {
             console.error(`Gagal memproses file ${file.name}:`, e);
-            // Jangan hentikan seluruh proses, biarkan berlanjut
+            // Lanjutkan ke file berikutnya
           }
         }
 
         // 4. Selesai & Unduh ZIP
         if (filesProcessedCount === 0) {
-            throw new Error("Tidak ada file yang berhasil diproses atau semua rentang halaman tidak valid.");
+            throw new Error("Tidak ada file yang berhasil diproses. Cek rentang halaman Anda.");
         }
         
         output.textContent = '📦 Membuat file ZIP...';
@@ -278,13 +295,11 @@
         output.textContent = `🎉 Selesai! ${filesProcessedCount} file berhasil diproses dan ada di dalam ZIP.`;
 
       } catch (e) {
-        // Tangkap error validasi utama
         output.className = 'status-box status-error';
         output.textContent = `❌ Gagal! ${e.message}`;
       } finally {
-        // Blok finally akan selalu berjalan
         isProcessing = false;
-        // Tunggu sebentar agar pengguna bisa membaca pesan
+        // Jangan reset tombol di sini, biarkan resetUI menanganinya
         await new Promise(res => setTimeout(res, 3000));
         resetUI(); // Reset otomatis
       }
