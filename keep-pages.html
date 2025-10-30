@@ -106,7 +106,7 @@
       table.appendChild(tbody);
       previewContainer.appendChild(table);
     }
-    suffixInput.addEventListener('input', updateStatus); // Perbarui status saat suffix diketik
+    suffixInput.addEventListener('input', updateStatus);
 
     // --- Pengaturan Dropzone ---
     function setupDropzone(element, filesContainer) {
@@ -159,17 +159,24 @@
       
       const pagesStr = pagesToKeepInput.value.trim();
       
-      if (isProcessing) return; // Jangan ubah status jika sedang memproses
+      if (isProcessing) return; 
+
+      // JANGAN ubah status jika saat ini sedang menampilkan error
+      if (output.className.includes('status-error')) {
+          // Jika user mulai mengetik lagi, baru reset error
+          if (pagesStr !== "" && pdfFiles.length > 0) {
+              output.className = 'status-box';
+          } else {
+              processButton.disabled = true;
+              return; // Biarkan pesan error tetap tampil
+          }
+      }
 
       if (pdfFiles.length > 0 && pagesStr !== "") {
-        // Keduanya terisi
-        output.className = 'status-box'; // Netralkan status
         output.textContent = `Siap memproses ${pdfFiles.length} file.`;
         processButton.disabled = false;
       } else {
-        // Salah satu atau keduanya kosong
         processButton.disabled = true;
-        output.className = 'status-box';
         if (pdfFiles.length === 0) {
           output.textContent = 'Menunggu file...';
         } else {
@@ -295,29 +302,24 @@
         hasSucceeded = true; // Tandai bahwa proses berhasil
 
       } catch (e) {
-        // Tangkap error validasi utama atau jika semua file gagal
         output.className = 'status-box status-error';
         output.textContent = `❌ Gagal! ${e.message}`;
         hasSucceeded = false; // Tandai bahwa proses gagal
       } finally {
         // --- BLOK FINALLY YANG DIPERBAIKI ---
         isProcessing = false;
-        processButton.disabled = false; // Selalu aktifkan kembali tombol
         
-        // Tunggu 4 detik AGAR PESAN STATUS BISA DIBACA
-        await new Promise(res => setTimeout(res, 4000));
+        // Selalu aktifkan kembali tombol, terlepas dari sukses atau gagal
+        processButton.disabled = false; 
         
         // HANYA reset UI jika proses SUKSES
         if (hasSucceeded) {
+            // Tunggu 4 detik agar pesan sukses bisa dibaca
+            await new Promise(res => setTimeout(res, 4000));
             resetUI();
-        } else {
-            // Jika GAGAL, jangan reset UI.
-            // Cukup aktifkan kembali tombol (sudah dilakukan) dan
-            // biarkan pesan error tetap tampil.
-            // Kita juga perlu mengaktifkan tombol lagi
-            updateStatus(); // Panggil ini untuk mengaktifkan tombol jika input valid
-            processButton.disabled = false; // Paksa aktifkan
         }
+        // Jika gagal, biarkan pesan error tetap tampil.
+        // Tombol sudah diaktifkan kembali.
       }
     });
     
