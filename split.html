@@ -55,7 +55,6 @@
     const startButton = document.getElementById('startButton');
     const output = document.getElementById('output');
     const fileListContainer = document.getElementById('fileListContainer');
-    // BARU: Ambil elemen input suffix
     const suffixInput = document.getElementById('suffixInput');
 
     // Tempat penyimpanan file
@@ -142,54 +141,98 @@
              startButton.disabled = true;
         }
     }
-
-    // BARU: Tambahkan reset untuk suffixInput
     function resetUI() {
         pdfFile = null; txtFile = null; pdfFileBuffer = null; isProcessing = false;
         pdfDropZone.textContent = "Klik / Drop 1 File PDF";
         txtDropZone.textContent = "Klik / Drop 1 File .txt";
         pdfDropZone.classList.remove("has-file"); txtDropZone.classList.remove("has-file");
         fileListContainer.innerHTML = ''; 
-        suffixInput.value = ''; // Reset input suffix
+        suffixInput.value = ''; 
         startButton.disabled = true;
         output.textContent = "Menunggu file..."; output.className = "status-box";
     }
 
     // --- 2. Logika Inti Pemisahan ---
     
-    // BARU: Ambil nilai suffix saat tombol diklik
+    // DIPERBARUI: Logika startButton diubah untuk pengurutan
     startButton.addEventListener('click', async () => {
         if (isProcessing || !pdfFile || !txtFile || !pdfFileBuffer) return;
         isProcessing = true; startButton.disabled = true; fileListContainer.innerHTML = ''; 
         output.textContent = "🚀 Memulai proses... Harap tunggu."; output.className = "status-box status-processing";
         
-        // BARU: Ambil nilai suffix
         const suffix = suffixInput.value; 
-
         let pdfjsDoc;
         try {
+            // Langkah 1: Baca file TXT (Mendapatkan urutan yang benar)
             output.textContent = `Membaca file .txt... (Langkah 1 dari 5)`;
-            const uniqueCodes = await readTxtFile(txtFile);
+            const uniqueCodes = await readTxtFile(txtFile); // Ini adalah array [CODE_A, CODE_B, CODE_C]
             if (uniqueCodes.length === 0) throw new Error("File .txt kosong atau tidak berisi baris teks yang valid.");
             
+            // Langkah 2: Baca PDF
             output.textContent = `Membaca file PDF... (Langkah 2 dari 5)`;
             const pdfjsData = pdfFileBuffer.slice(0); 
             const loadingTask = pdfjsLib.getDocument({ data: pdfjsData });
             pdfjsDoc = await loadingTask.promise;
             const totalPageCount = pdfjsDoc.numPages;
 
+            // Langkah 3: Buat "Peta Penemuan" (Tidak diurutkan)
             output.textContent = `Memindai ${totalPageCount} halaman... (Langkah 3 dari 5)`;
-            const pageMap = await createSplitMap(pdfjsDoc, uniqueCodes);
+            // foundEntries adalah array [{code, page}, ...] TIDAK DIURUTKAN
+            const foundEntries = await createSplitMap(pdfjsDoc, uniqueCodes); 
             
-            if (pageMap.length === 0) throw new Error("Tidak ada satupun kode unik yang ditemukan di dalam PDF. Periksa Console Log (F12) untuk detail.");
+            if (foundEntries.length === 0) throw new Error("Tidak ada satupun kode unik yang ditemukan di dalam PDF. Periksa Console Log (F12) untuk detail.");
             
-            output.textContent = `Rencana pemisahan dibuat. ${pageMap.length} kode ditemukan. (Langkah 4 dari 5)`;
-            // BARU: Kirim suffix ke renderPreviewList
-            renderPreviewList(pageMap, totalPageCount, suffix); 
+            // --- LOGIKA BARU UNTUK PENGURUTAN ---
+            output.textContent = `Menghitung rentang halaman... (Langkah 4 dari 5)`;
+            
+            // 4a. Buat Peta Rentang Halaman (berdasarkan urutan halaman)
+            // Urutkan berdasarkan halaman HANYA untuk menentukan rentang
+            const sortedByPage = [...foundEntries].sort((a, b) => a.page - b.page);
+            const rangeMap = new Map();
+            for (let i = 0; i < sortedByPage.length; i++) {
+                const entry = sortedByPage[i];
+                const startPage = entry.page;
+                let endPage;
+                
+                const isLastEntry = (i === sortedByPage.length - 1);
+                if (isLastEntry) {
+                    endPage = totalPageCount;
+                } else {
+                    endPage = sortedByPage[i + 1].page - 1; // Halaman sebelum kode berikutnya
+                }
+                
+                if (endPage < startPage) endPage = startPage; // Jika 2 kode di halaman yg sama
+                
+                rangeMap.set(entry.code, { start: startPage, end: endPage });
+            }
+            
+            // 4b. Buat Daftar Proses Akhir (berdasarkan urutan TXT)
+            const processingList = [];
+            for (const code of uniqueCodes) {
+                const range = rangeMap.get(code); // Ambil rentang halaman dari peta
+                if (range) {
+                    // Jika kode ditemukan, tambahkan ke daftar proses
+                    processingList.push({
+                        code: code,
+                        startPage: range.start,
+                        endPage: range.end
+                    });
+                }
+            }
+            
+            if (processingList.length === 0) {
+                // Ini terjadi jika kode di TXT ada, tapi tidak satupun ditemukan di PDF
+                throw new Error("Kode di .txt tidak ada yang cocok dengan isi PDF.");
+            }
+            // --- AKHIR LOGIKA BARU ---
 
-            output.textContent = `Mulai memotong ${pageMap.length} file... (Langkah 5 dari 5)`;
-            // BARU: Kirim suffix ke splitPdfDocuments
-            const zip = await splitPdfDocuments(pdfFileBuffer, pageMap, totalPageCount, suffix);
+            output.textContent = `Rencana pemisahan dibuat. ${processingList.length} file akan dibuat.`;
+            renderPreviewList(processingList, suffix); // Kirim daftar yang sudah urut
+
+            // Langkah 5: Potong PDF
+            output.textContent = `Mulai memotong ${processingList.length} file... (Langkah 5 dari 5)`;
+            // Kirim daftar yang sudah urut
+            const zip = await splitPdfDocuments(pdfFileBuffer, processingList, suffix);
             
             const processedFileNames = Object.keys(zip.files);
             if (processedFileNames.length === 0) {
@@ -197,7 +240,6 @@
             }
 
             output.textContent = `📦 Membuat file ZIP...`;
-            // BARU: Tambahkan suffix ke nama file ZIP juga
             const zipName = pdfFile.name.replace(/\.pdf$/i, '') + suffix + "_terpisah.zip";
             const zipBlob = await zip.generateAsync({ type: "blob" });
             downloadBytes(zipBlob, zipName, "application/zip");
@@ -216,13 +258,12 @@
             txtDropZone.textContent = "Klik / Drop 1 File .txt";
             pdfDropZone.classList.remove("has-file"); txtDropZone.classList.remove("has-file");
             startButton.disabled = true; 
-            // Kita biarkan suffixInput terisi jika pengguna ingin run lagi
         }
     });
 
     // --- 3. Fungsi Helper ---
 
-    // Helper 1: Membaca file .txt
+    // Helper 1: Membaca file .txt (Tidak berubah)
     function readTxtFile(file) {
         return new Promise((resolve, reject) => {
             const reader = new FileReader();
@@ -236,7 +277,7 @@
         });
     }
     
-    // Helper 2: Peta Pemisahan (Dengan Normalisasi & Logging)
+    // Helper 2: Peta Pemisahan (Tidak berubah, tidak mengurutkan)
     async function createSplitMap(pdfjsDoc, uniqueCodes) {
         const pageCount = pdfjsDoc.numPages;
         const pageMap = [];
@@ -248,6 +289,7 @@
             normalized: normalize(code)
         }));
 
+        // (Logging di console bisa dihapus jika sudah tidak diperlukan)
         console.log("--- Normalisasi Kode Unik dari TXT ---");
         normalizedUniqueCodes.forEach(c => console.log(`  [${c.normalized}] (dari: ${c.original})`));
         console.log("-------------------------------------");
@@ -273,51 +315,46 @@
             }
              console.log(`---------------------`);
         }
-        pageMap.sort((a, b) => a.page - b.page);
-        return pageMap; 
+        // HAPUS PENGURUTAN DARI SINI
+        return pageMap; // Kembalikan array yang ditemukan apa adanya
     }
     
-    // Helper 3: Menampilkan Pratinjau (DIPERBARUI: menerima suffix)
-    function renderPreviewList(pageMap, totalPageCount, suffix = '') { // Terima suffix
+    // Helper 3: Menampilkan Pratinjau (DIPERBARUI: menerima processingList)
+    function renderPreviewList(processingList, suffix = '') {
         fileListContainer.innerHTML = ''; 
-        for (let i = 0; i < pageMap.length; i++) {
-            const currentEntry = pageMap[i]; const startPage = currentEntry.page;
-            let endPage; const isLastEntry = (i === pageMap.length - 1);
-            if (isLastEntry) { endPage = totalPageCount; } else { endPage = pageMap[i + 1].page - 1; }
-            if (endPage < startPage) { endPage = startPage; }
+        
+        // Loop berdasarkan processingList yang sudah urut
+        for (let i = 0; i < processingList.length; i++) {
+            const entry = processingList[i];
             
-            // BARU: Tambahkan suffix ke nama file pratinjau
-            const previewFileName = `${i + 1}. ${escapeHtml(currentEntry.code)}${escapeHtml(suffix)}.pdf`;
+            const previewFileName = `${i + 1}. ${escapeHtml(entry.code)}${escapeHtml(suffix)}.pdf`;
 
             const div = document.createElement('div'); div.className = 'file-item';
             div.innerHTML = `
               <div class="file-info">
                 <span class="file-name" title="${previewFileName}">${previewFileName}</span>
-                <span class="file-size">Halaman ${startPage} - ${endPage}</span>
+                <span class="file-size">Halaman ${entry.startPage} - ${entry.endPage}</span>
               </div>
               <div class="file-controls"> <span id="status-${i}" class="file-status pending">Menunggu...</span> </div>`;
             fileListContainer.appendChild(div);
         }
     }
     
-    // Helper 4: Memotong PDF (pdf-lib) (DIPERBARUI: menerima suffix)
-    async function splitPdfDocuments(pdfData, pageMap, totalPageCount, suffix = '') { // Terima suffix
+    // Helper 4: Memotong PDF (pdf-lib) (DIPERBARUI: menerima processingList)
+    async function splitPdfDocuments(pdfData, processingList, suffix = '') {
         const pdfDoc = await PDFDocument.load(pdfData.slice(0)); 
         const zip = new JSZip();
         
-        for (let i = 0; i < pageMap.length; i++) {
-            const currentEntry = pageMap[i]; 
+        // Loop berdasarkan processingList yang sudah urut
+        for (let i = 0; i < processingList.length; i++) {
+            const entry = processingList[i];
             const statusEl = document.getElementById(`status-${i}`);
             
             try {
                 if (statusEl) { statusEl.textContent = 'Memproses... ⏳'; statusEl.className = 'file-status processing'; }
 
-                const startPage = currentEntry.page; 
-                let endPage; 
-                const isLastEntry = (i === pageMap.length - 1);
-                
-                if (isLastEntry) { endPage = totalPageCount; } else { endPage = pageMap[i + 1].page - 1; }
-                if (endPage < startPage) { endPage = startPage; }
+                const startPage = entry.startPage; 
+                const endPage = entry.endPage;
                 
                 const newDoc = await PDFDocument.create();
                 
@@ -333,14 +370,13 @@
                 
                 const newBytes = await newDoc.save();
                 
-                // BARU: Tambahkan suffix ke nama file di ZIP
-                const newFileName = `${i + 1}. ${currentEntry.code}${suffix}.pdf`;
+                const newFileName = `${i + 1}. ${entry.code}${suffix}.pdf`;
                 zip.file(newFileName, newBytes);
 
                 if (statusEl) { statusEl.textContent = '✅ Selesai'; statusEl.className = 'file-status success'; }
 
             } catch (err) {
-                 console.error(`Gagal memproses file: ${currentEntry.code}`, err);
+                 console.error(`Gagal memproses file: ${entry.code}`, err);
                  if (statusEl) { statusEl.textContent = '❌ Gagal'; statusEl.className = 'file-status error'; }
             }
         }
