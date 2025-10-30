@@ -111,10 +111,11 @@
         updateStatus(); // Panggil updateStatus juga
     });
 
-    // --- Pengaturan Dropzone (DIPERBAIKI) ---
+    // --- Pengaturan Dropzone ---
     function setupDropzone(element, filesContainer) {
       const handleFiles = (files) => {
         if (isProcessing) return;
+        output.className = 'status-box'; // Bersihkan error lama
         const newPdfFiles = [...files].filter(f => f.type === 'application/pdf');
         if (newPdfFiles.length === 0) return;
         
@@ -123,7 +124,7 @@
         
         element.textContent = `${filesContainer.length} file PDF dipilih.`;
         element.classList.add('has-file');
-        updateStatus(); // Panggil updateStatus
+        updateStatus(); 
       };
       
       const handleClick = () => {
@@ -155,22 +156,20 @@
 
     // --- Update Status (DIPERBAIKI) ---
     function updateStatus() {
-      // Hanya panggil update tabel pratinjau jika ada file
       if (pdfFiles.length > 0) {
           updatePreviewTable();
       }
       
+      output.className = 'status-box'; // Bersihkan error lama
       const pagesStr = pagesToKeepInput.value.trim();
       
       if (pdfFiles.length > 0 && pagesStr !== "") {
         // Keduanya terisi
-        output.className = 'status-box status-success';
         output.textContent = `Siap memproses ${pdfFiles.length} file.`;
         processButton.disabled = false;
       } else {
         // Salah satu atau keduanya kosong
         processButton.disabled = true;
-        output.className = 'status-box';
         if (pdfFiles.length === 0) {
           output.textContent = 'Menunggu file...';
         } else {
@@ -179,7 +178,6 @@
       }
     }
     
-    // Panggil updateStatus saat input halaman berubah
     pagesToKeepInput.addEventListener('input', updateStatus);
 
     // --- Fungsi Bantuan: Mem-parsing Halaman ---
@@ -220,30 +218,30 @@
       setTimeout(() => URL.revokeObjectURL(url), 60000);
     }
 
-    // --- Logika Proses Utama (DIPERBAIKI) ---
+    // --- Logika Proses Utama (DIPERBAIKI DENGAN PENANGANAN ERROR) ---
     processButton.addEventListener('click', async () => {
       const pagesToKeepStr = pagesToKeepInput.value;
       
       if (isProcessing) return;
       isProcessing = true;
       processButton.disabled = true;
+      output.className = 'status-box status-processing'; // Set status proses
+
+      let filesProcessedCount = 0;
+      let errorList = []; // Kumpulkan error di sini
+      const zip = new JSZip();
 
       try {
-        // 1. Validasi Input (sudah ditangani oleh updateStatus, tapi cek lagi)
+        // 1. Validasi Input Awal
+        const indicesToKeep = parsePageIndices(pagesToKeepStr);
         if (pdfFiles.length === 0) {
           throw new Error('Harap pilih file PDF terlebih dahulu!');
         }
-        
-        const indicesToKeep = parsePageIndices(pagesToKeepStr);
         if (indicesToKeep.length === 0) {
           throw new Error('Harap masukkan nomor halaman yang valid! Contoh: 8 atau 1, 5-7');
         }
         
-        output.className = 'status-box status-processing';
-        output.textContent = `✅ Validasi sukses. Akan memproses ${pdfFiles.length} file...`;
-
-        const zip = new JSZip();
-        let filesProcessedCount = 0;
+        output.textContent = `✅ Validasi sukses. Memulai proses ${pdfFiles.length} file...`;
 
         // 2. Loop dan Proses Setiap File
         for (let i = 0; i < pdfFiles.length; i++) {
@@ -251,19 +249,19 @@
           output.textContent = `🔧 Memproses file ke-${i + 1} dari ${pdfFiles.length} (${file.name})...`;
           
           try {
-            const newPdf = await PDFDocument.create();
-            // BACA BUFFER DI SINI (HANYA SEKALI)
             const buffer = await file.arrayBuffer(); 
             const existingPdf = await PDFDocument.load(buffer);
             const totalPages = existingPdf.getPageCount();
 
+            // Filter index yang valid (tidak lebih besar dari total halaman)
             const validIndicesToKeep = indicesToKeep.filter(index => index >= 0 && index < totalPages);
             
             if (validIndicesToKeep.length === 0) {
-              console.warn(`Tidak ada halaman yang disimpan untuk file ${file.name}. Melewati file.`);
-              continue; 
+              // INI KEMUNGKINAN BESAR SUMBER ERROR ANDA
+              throw new Error(`Halaman "${pagesToKeepStr}" tidak ada di file ini (total ${totalPages} hal).`);
             }
             
+            const newPdf = await PDFDocument.create();
             const copiedPages = await newPdf.copyPages(existingPdf, validIndicesToKeep);
             copiedPages.forEach(page => newPdf.addPage(page));
 
@@ -276,14 +274,17 @@
             filesProcessedCount++;
 
           } catch (e) {
+            // Tangkap error per file, catat, dan lanjutkan
             console.error(`Gagal memproses file ${file.name}:`, e);
-            // Lanjutkan ke file berikutnya
+            errorList.push(`${file.name}: ${e.message}`);
           }
-        }
+        } // Akhir Loop
 
         // 4. Selesai & Unduh ZIP
         if (filesProcessedCount === 0) {
-            throw new Error("Tidak ada file yang berhasil diproses. Cek rentang halaman Anda.");
+            // Jika TIDAK ADA file yg sukses
+            const errorMsg = errorList.length > 0 ? errorList[0] : "Tidak ada file yang berhasil diproses.";
+            throw new Error(errorMsg);
         }
         
         output.textContent = '📦 Membuat file ZIP...';
@@ -292,16 +293,30 @@
         downloadBytes(zipBlob, zipName, 'application/zip');
         
         output.className = 'status-box status-success';
-        output.textContent = `🎉 Selesai! ${filesProcessedCount} file berhasil diproses dan ada di dalam ZIP.`;
+        output.textContent = `🎉 Selesai! ${filesProcessedCount} file berhasil diproses.`;
+        if (errorList.length > 0) {
+            output.textContent += ` (${errorList.length} file gagal.)`;
+            // Tampilkan error pertama di console untuk debug
+            console.warn(`Error pertama: ${errorList[0]}`);
+        }
 
       } catch (e) {
+        // Tangkap error validasi utama
         output.className = 'status-box status-error';
         output.textContent = `❌ Gagal! ${e.message}`;
       } finally {
+        // Blok finally akan selalu berjalan
         isProcessing = false;
-        // Jangan reset tombol di sini, biarkan resetUI menanganinya
-        await new Promise(res => setTimeout(res, 3000));
-        resetUI(); // Reset otomatis
+        processButton.disabled = false; // Aktifkan lagi tombolnya
+        
+        // Tunggu 4 detik AGAR PESAN STATUS BISA DIBACA
+        await new Promise(res => setTimeout(res, 4000));
+        
+        // Baru reset UI jika status BUKAN error
+        if (output.className !== 'status-box status-error') {
+            resetUI();
+        }
+        // Jika error, biarkan pesan error tetap tampil
       }
     });
     
