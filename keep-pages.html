@@ -106,16 +106,13 @@
       table.appendChild(tbody);
       previewContainer.appendChild(table);
     }
-    suffixInput.addEventListener('input', () => {
-        updatePreviewTable();
-        updateStatus(); // Panggil updateStatus juga
-    });
+    suffixInput.addEventListener('input', updateStatus); // Perbarui status saat suffix diketik
 
     // --- Pengaturan Dropzone ---
     function setupDropzone(element, filesContainer) {
       const handleFiles = (files) => {
         if (isProcessing) return;
-        output.className = 'status-box'; // Bersihkan error lama
+        output.className = 'status-box'; 
         const newPdfFiles = [...files].filter(f => f.type === 'application/pdf');
         if (newPdfFiles.length === 0) return;
         
@@ -154,26 +151,29 @@
     
     setupDropzone(pdfDropzone, pdfFiles);
 
-    // --- Update Status (DIPERBAIKI) ---
+    // --- Update Status (Logika Tombol) ---
     function updateStatus() {
       if (pdfFiles.length > 0) {
           updatePreviewTable();
       }
       
-      output.className = 'status-box'; // Bersihkan error lama
       const pagesStr = pagesToKeepInput.value.trim();
       
+      if (isProcessing) return; // Jangan ubah status jika sedang memproses
+
       if (pdfFiles.length > 0 && pagesStr !== "") {
         // Keduanya terisi
+        output.className = 'status-box'; // Netralkan status
         output.textContent = `Siap memproses ${pdfFiles.length} file.`;
         processButton.disabled = false;
       } else {
         // Salah satu atau keduanya kosong
         processButton.disabled = true;
+        output.className = 'status-box';
         if (pdfFiles.length === 0) {
           output.textContent = 'Menunggu file...';
         } else {
-          output.textContent = 'Menunggu nomor halaman...'; // Lebih spesifik
+          output.textContent = 'Menunggu nomor halaman...';
         }
       }
     }
@@ -218,21 +218,21 @@
       setTimeout(() => URL.revokeObjectURL(url), 60000);
     }
 
-    // --- Logika Proses Utama (DIPERBAIKI DENGAN PENANGANAN ERROR) ---
+    // --- Logika Proses Utama (DIPERBARUI DENGAN LOGIKA FINALLY) ---
     processButton.addEventListener('click', async () => {
       const pagesToKeepStr = pagesToKeepInput.value;
       
       if (isProcessing) return;
       isProcessing = true;
       processButton.disabled = true;
-      output.className = 'status-box status-processing'; // Set status proses
+      output.className = 'status-box status-processing';
 
       let filesProcessedCount = 0;
-      let errorList = []; // Kumpulkan error di sini
+      let errorList = []; 
       const zip = new JSZip();
+      let hasSucceeded = false; // Flag untuk melacak sukses
 
       try {
-        // 1. Validasi Input Awal
         const indicesToKeep = parsePageIndices(pagesToKeepStr);
         if (pdfFiles.length === 0) {
           throw new Error('Harap pilih file PDF terlebih dahulu!');
@@ -243,7 +243,6 @@
         
         output.textContent = `✅ Validasi sukses. Memulai proses ${pdfFiles.length} file...`;
 
-        // 2. Loop dan Proses Setiap File
         for (let i = 0; i < pdfFiles.length; i++) {
           const file = pdfFiles[i];
           output.textContent = `🔧 Memproses file ke-${i + 1} dari ${pdfFiles.length} (${file.name})...`;
@@ -253,11 +252,9 @@
             const existingPdf = await PDFDocument.load(buffer);
             const totalPages = existingPdf.getPageCount();
 
-            // Filter index yang valid (tidak lebih besar dari total halaman)
             const validIndicesToKeep = indicesToKeep.filter(index => index >= 0 && index < totalPages);
             
             if (validIndicesToKeep.length === 0) {
-              // INI KEMUNGKINAN BESAR SUMBER ERROR ANDA
               throw new Error(`Halaman "${pagesToKeepStr}" tidak ada di file ini (total ${totalPages} hal).`);
             }
             
@@ -265,7 +262,6 @@
             const copiedPages = await newPdf.copyPages(existingPdf, validIndicesToKeep);
             copiedPages.forEach(page => newPdf.addPage(page));
 
-            // 3. Simpan ke ZIP
             const pdfBytes = await newPdf.save();
             const originalName = file.name.replace(/\.pdf$/i, "");
             const finalName = `${originalName}${suffixInput.value}.pdf`;
@@ -274,15 +270,12 @@
             filesProcessedCount++;
 
           } catch (e) {
-            // Tangkap error per file, catat, dan lanjutkan
             console.error(`Gagal memproses file ${file.name}:`, e);
             errorList.push(`${file.name}: ${e.message}`);
           }
-        } // Akhir Loop
+        }
 
-        // 4. Selesai & Unduh ZIP
         if (filesProcessedCount === 0) {
-            // Jika TIDAK ADA file yg sukses
             const errorMsg = errorList.length > 0 ? errorList[0] : "Tidak ada file yang berhasil diproses.";
             throw new Error(errorMsg);
         }
@@ -296,27 +289,35 @@
         output.textContent = `🎉 Selesai! ${filesProcessedCount} file berhasil diproses.`;
         if (errorList.length > 0) {
             output.textContent += ` (${errorList.length} file gagal.)`;
-            // Tampilkan error pertama di console untuk debug
             console.warn(`Error pertama: ${errorList[0]}`);
         }
+        
+        hasSucceeded = true; // Tandai bahwa proses berhasil
 
       } catch (e) {
-        // Tangkap error validasi utama
+        // Tangkap error validasi utama atau jika semua file gagal
         output.className = 'status-box status-error';
         output.textContent = `❌ Gagal! ${e.message}`;
+        hasSucceeded = false; // Tandai bahwa proses gagal
       } finally {
-        // Blok finally akan selalu berjalan
+        // --- BLOK FINALLY YANG DIPERBAIKI ---
         isProcessing = false;
-        processButton.disabled = false; // Aktifkan lagi tombolnya
+        processButton.disabled = false; // Selalu aktifkan kembali tombol
         
         // Tunggu 4 detik AGAR PESAN STATUS BISA DIBACA
         await new Promise(res => setTimeout(res, 4000));
         
-        // Baru reset UI jika status BUKAN error
-        if (output.className !== 'status-box status-error') {
+        // HANYA reset UI jika proses SUKSES
+        if (hasSucceeded) {
             resetUI();
+        } else {
+            // Jika GAGAL, jangan reset UI.
+            // Cukup aktifkan kembali tombol (sudah dilakukan) dan
+            // biarkan pesan error tetap tampil.
+            // Kita juga perlu mengaktifkan tombol lagi
+            updateStatus(); // Panggil ini untuk mengaktifkan tombol jika input valid
+            processButton.disabled = false; // Paksa aktifkan
         }
-        // Jika error, biarkan pesan error tetap tampil
       }
     });
     
