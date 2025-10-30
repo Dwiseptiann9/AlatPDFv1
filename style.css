@@ -48,32 +48,32 @@ body {
 /* 2. Layout Utama & Header */
 .container { 
   max-width: 1200px; 
-  margin: 32px auto; /* Lebih banyak margin atas/bawah */
+  margin: 32px auto; 
   padding: 0 24px;
 }
 
 .page-header {
   text-align: center;
-  margin-bottom: 48px; /* Lebih banyak jarak bawah */
+  margin-bottom: 48px; 
   padding: 48px 24px;
-  background-color: transparent; /* Header transparan */
-  border-bottom: none; /* Hapus border */
+  background-color: transparent; 
+  border-bottom: none; 
 }
 .page-header h1 {
-  font-size: 2.8em; /* Sedikit lebih besar */
-  color: var(--text-color); /* Putih/abu terang */
+  font-size: 2.8em; 
+  color: var(--text-color); 
   font-weight: 700;
   margin-bottom: 16px;
-  letter-spacing: -0.02em; /* Kerning halus */
+  letter-spacing: -0.02em; 
 }
 .page-header p {
-  font-size: 1.2em; /* Sedikit lebih besar */
+  font-size: 1.2em; 
   max-width: 650px;
   margin: 0 auto;
   color: var(--text-light);
 }
 .back-link {
-  display: inline-block; /* Agar tidak full width */
+  display: inline-block; 
   margin: 0 auto 24px;
   font-size: 1em;
   font-weight: 500;
@@ -85,49 +85,50 @@ body {
 }
 .back-link:hover {
   color: var(--primary-hover);
-  background-color: var(--bg-card); /* Latar halus saat hover */
+  background-color: var(--bg-card); 
 }
 
 /* 3. Kartu (Card) */
 .card {
   background: var(--bg-card);
   border: 1px solid var(--border-color);
-  padding: 32px; /* Padding lebih besar */
-  border-radius: var(--radius-lg); /* Radius lebih besar */
+  padding: 32px; 
+  border-radius: var(--radius-lg); 
   box-shadow: var(--shadow);
   margin-bottom: 32px;
   transition: box-shadow var(--transition-speed) var(--transition-func);
 }
-.card:focus-within { /* Highlight saat fokus di dalam card */
+.card:focus-within { 
     border-color: var(--primary-light);
     box-shadow: 0 0 0 3px var(--primary-light);
 }
 
-/* 4. Portal Utama (index.html) */
+/* 4. Portal Utama (index.html) - DIPERBARUI SESUAI PERMINTAAN */
 .portal-container {
   display: grid;
+  /* Default: 2 kolom untuk Desktop & Tablet */
   grid-template-columns: repeat(2, 1fr); 
-  gap: 32px; /* Jarak lebih besar */
+  gap: 32px;
 }
 .portal-card {
   background: var(--bg-card);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
-  padding: 40px; /* Padding lebih besar */
+  padding: 40px; 
   text-align: center;
   text-decoration: none;
   color: var(--text-color);
   transition: all var(--transition-speed) var(--transition-func);
   box-shadow: var(--shadow);
-  display: flex; /* Untuk alignment vertikal */
+  display: flex; 
   flex-direction: column;
-  justify-content: space-between; /* Dorong tombol ke bawah */
+  justify-content: space-between; 
 }
 .portal-card:hover {
-  transform: translateY(-4px); /* Efek angkat halus */
-  box-shadow: var(--shadow-lg); /* Shadow lebih besar saat hover */
+  transform: translateY(-4px); 
+  box-shadow: var(--shadow-lg); 
   border-color: var(--primary-color);
-  background: linear-gradient(rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0.02)), var(--bg-card); /* Gradasi tipis */
+  background: linear-gradient(rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0.02)), var(--bg-card); 
 }
 .portal-card .portal-icon {
   font-size: 3.5em;
@@ -135,22 +136,22 @@ body {
   line-height: 1;
 }
 .portal-card h2 {
-  font-size: 1.6em; /* Sedikit lebih kecil agar fokus ke icon */
-  color: var(--text-color); /* Teks putih */
+  font-size: 1.6em; 
+  color: var(--text-color); 
   margin-bottom: 12px;
   font-weight: 600;
 }
 .portal-card p {
   font-size: 1em;
   color: var(--text-light);
-  margin-bottom: 32px; /* Jarak lebih besar sebelum tombol */
-  flex-grow: 1; /* Biarkan deskripsi mengisi ruang */
+  margin-bottom: 32px; 
+  flex-grow: 1; 
 }
 .portal-card .button-primary {
-  width: auto; /* Tombol tidak full width */
+  width: auto; 
   padding-left: 32px;
   padding-right: 32px;
-  margin: 0 auto; /* Tengah */
+  margin: 0 auto; 
 }
 
 /* 5. Kontrol Formulir (Tombol, Input) */
@@ -171,27 +172,27 @@ body {
 }
 .button-primary:hover:not(:disabled) { 
   background: var(--primary-hover); 
-  transform: translateY(-2px); /* Efek angkat tombol */
+  transform: translateY(-2px); 
   box-shadow: var(--shadow-lg);
 }
 .button-primary:active:not(:disabled) {
-    transform: translateY(0px); /* Kembali saat diklik */
+    transform: translateY(0px); 
     box-shadow: var(--shadow);
 }
-.button-primary[disabled] { opacity: 0.5; cursor: not-allowed; } /* Hanya opacity */
+.button-primary[disabled] { opacity: 0.5; cursor: not-allowed; } 
 .button-primary.button-large {
-  padding: 16px 32px; /* Lebih besar */
+  padding: 16px 32px; 
   font-size: 1.1em;
   width: 100%;
-  max-width: 400px; /* Batasi lebar */
+  max-width: 400px; 
   margin: 0 auto;
   display: block;
 }
 
 .button-secondary {
-  padding: 8px 16px; /* Sedikit lebih besar */
+  padding: 8px 16px; 
   font-size: 0.9em;
-  background: transparent; /* Transparan */
+  background: transparent; 
   color: var(--primary-color);
   border: 1px solid var(--primary-color);
   border-radius: var(--radius);
@@ -199,15 +200,15 @@ body {
   transition: all var(--transition-speed) var(--transition-func);
 }
 .button-secondary:hover:not(:disabled) { 
-  background-color: var(--primary-light); /* Latar saat hover */
-  color: var(--text-color); /* Teks terang saat hover */
+  background-color: var(--primary-light); 
+  color: var(--text-color); 
 }
 .button-secondary[disabled] { opacity: 0.5; cursor: not-allowed; border-color: var(--border-color); color: var(--text-darker); }
 
 .input-field {
   width: 100%;
-  padding: 12px 16px; /* Padding lebih */
-  border: 1px solid var(--text-darker); /* Border lebih jelas */
+  padding: 12px 16px; 
+  border: 1px solid var(--text-darker); 
   border-radius: var(--radius);
   font-size: 1em;
   box-sizing: border-box;
@@ -218,25 +219,25 @@ body {
 .input-field:focus {
   border-color: var(--primary-color);
   outline: none;
-  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.3); /* Shadow indigo transparan */
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.3); 
 }
-.input-field::placeholder { color: var(--text-darker); } /* Placeholder lebih gelap */
+.input-field::placeholder { color: var(--text-darker); } 
 
 .label {
-  font-size: 1.1em; /* Sedikit lebih kecil */
+  font-size: 1.1em; 
   font-weight: 500;
-  color: var(--text-light); /* Abu-abu terang */
+  color: var(--text-light); 
   margin-bottom: 12px;
   display: block;
-  text-align: left; /* Label rata kiri */
+  text-align: left; 
 }
 .setting-label {
   display: block;
-  margin: 24px 0 10px 0; /* Jarak lebih */
+  margin: 24px 0 10px 0; 
   font-weight: 600;
   font-size: 1em;
   color: var(--text-color);
-  text-align: left; /* Rata kiri */
+  text-align: left; 
 }
 
 hr { border: none; border-top: 1px solid var(--border-color); margin: 32px 0; }
@@ -245,9 +246,9 @@ hr { border: none; border-top: 1px solid var(--border-color); margin: 32px 0; }
 /* 6. Dropzone (Area Upload) */
 .dropzone {
   border: 2px dashed var(--border-color);
-  border-radius: var(--radius-lg); /* Radius lebih besar */
-  padding: 40px; /* Padding lebih */
-  background: var(--bg-color); /* Latar = latar utama */
+  border-radius: var(--radius-lg); 
+  padding: 40px; 
+  background: var(--bg-color); 
   cursor: pointer;
   transition: all var(--transition-speed) var(--transition-func);
   display: flex;
@@ -259,11 +260,11 @@ hr { border: none; border-top: 1px solid var(--border-color); margin: 32px 0; }
   word-break: break-word;
   font-weight: 500;
   color: var(--text-light);
-  position: relative; /* Untuk pseudo element */
+  position: relative; 
   overflow: hidden;
 }
 .dropzone:before {
-  content: '📤'; /* Ganti dengan ikon SVG jika memungkinkan */
+  content: '📤'; 
   font-size: 2.5em;
   margin-bottom: 12px;
   opacity: 0.4;
@@ -275,7 +276,7 @@ hr { border: none; border-top: 1px solid var(--border-color); margin: 32px 0; }
 }
 .dropzone.dragover {
   border-color: var(--primary-color);
-  border-style: solid; /* Ganti ke solid saat drag over */
+  border-style: solid; 
   color: var(--primary-color);
   background-color: var(--primary-light);
 }
@@ -291,7 +292,7 @@ hr { border: none; border-top: 1px solid var(--border-color); margin: 32px 0; }
 .dropzone-wrapper { position: relative; margin-bottom: 16px; }
 .dropzone-wrapper .input-field { margin-top: 12px; text-align: center; }
 
-/* 7. Alat Gabung PDF (merge.html) */
+/* 7. Alat Gabung PDF (merge.html) & Simpan Halaman (keep-pages.html) */
 .input-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; }
 #sisipanContainer { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 16px; }
 .sisipan-dropzone { min-height: 120px; padding: 12px; font-size: 0.9em; }
@@ -316,36 +317,35 @@ hr { border: none; border-top: 1px solid var(--border-color); margin: 32px 0; }
 /* 8. Alat Hapus Halaman & Pisah PDF */
 #fileListContainer { 
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg); /* Radius lebih besar */
+  border-radius: var(--radius-lg); 
   margin-bottom: 32px;
   max-height: 450px; 
   overflow-y: auto;
-  background: var(--bg-card); /* Latar = Latar kartu */
+  background: var(--bg-card); 
 }
 #fileListContainer .file-item:hover { background-color: var(--bg-hover); }
 
 .file-item { 
   display: flex; justify-content: space-between; align-items: center; 
-  padding: 14px 16px; /* Padding lebih */
+  padding: 14px 16px; 
   border-bottom: 1px solid var(--border-color); 
   border-radius: 0; 
   transition: background-color var(--transition-speed) var(--transition-func); 
   flex-wrap: wrap; gap: 12px; 
 }
 .file-item:last-child { border-bottom: none; }
-/* Hover dipindahkan ke container */
 .file-info { display: flex; flex-direction: column; flex: 1; min-width: 250px; }
-.file-name { font-weight: 500; word-break: break-all; color: var(--text-color); } /* Lebih tipis */
+.file-name { font-weight: 500; word-break: break-all; color: var(--text-color); } 
 .file-size { font-size: 0.85em; color: var(--text-light); }
 .file-controls { display: flex; align-items: center; gap: 14px; white-space: nowrap; }
-.file-status { font-size: 0.85em; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;} /* Style status */
+.file-status { font-size: 0.85em; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;} 
 .file-status.pending { color: var(--text-darker); }
 .file-status.processing { color: var(--processing-color); }
 .file-status.success { color: var(--success-color); }
 .file-status.error { color: var(--danger-color); }
 
 /* Modal */
-.modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(17, 24, 39, 0.9); /* Latar lebih gelap */ backdrop-filter: blur(4px); /* Efek blur */ } 
+.modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(17, 24, 39, 0.9); backdrop-filter: blur(4px); } 
 .modal-content { background-color: var(--bg-card); margin: 5% auto; padding: 32px; border: none; width: 90%; max-width: 1000px; border-radius: var(--radius-lg); box-shadow: var(--shadow-lg); }
 .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; border-bottom: 1px solid var(--border-color); padding-bottom: 16px;}
 .modal-header h2 { color: var(--text-color); font-size: 1.5em; font-weight: 600; }
@@ -354,9 +354,9 @@ hr { border: none; border-top: 1px solid var(--border-color); margin: 32px 0; }
 #modalInfo { font-size: 0.95em; color: var(--text-light); margin-bottom: 20px; }
 #modalBody { background: var(--bg-color); border: 1px solid var(--border-color); border-radius: var(--radius); padding: 20px; max-height: 60vh; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 20px; }
 .page-preview { border: 2px solid transparent; border-radius: var(--radius); background: var(--bg-card); padding: 6px; text-align: center; transition: transform var(--transition-speed); }
-.page-preview:hover { transform: scale(1.03); } /* Efek zoom kecil */
+.page-preview:hover { transform: scale(1.03); } 
 .page-preview span { font-size: 0.8em; font-weight: 500; display: block; margin-bottom: 6px; color: var(--text-light); }
-.page-preview canvas { max-width: 100%; height: auto; border-radius: calc(var(--radius) - 4px); /* Radius dalam */ border: 1px solid var(--border-color); } 
+.page-preview canvas { max-width: 100%; height: auto; border-radius: calc(var(--radius) - 4px); border: 1px solid var(--border-color); } 
 .page-preview.deleted { border-color: var(--danger-color); background-color: var(--danger-light); }
 .page-preview.deleted span { color: var(--danger-color); } 
 .loader { margin: 40px auto; border: 6px solid var(--border-color); border-top: 6px solid var(--primary-color); border-radius: 50%; width: 40px; height: 40px; animation: spin 0.8s linear infinite; }
@@ -366,12 +366,12 @@ hr { border: none; border-top: 1px solid var(--border-color); margin: 32px 0; }
 .status-box {
   margin-top: 32px;
   font-weight: 500; 
-  font-size: 1.05em; /* Sedikit lebih kecil */
+  font-size: 1.05em; 
   padding: 16px 20px;
   border-radius: var(--radius);
   border: 1px solid var(--border-color);
   background-color: var(--bg-card);
-  color: var(--text-light); /* Status default abu-abu */
+  color: var(--text-light); 
   text-align: center;
   transition: all var(--transition-speed) var(--transition-func);
 }
@@ -379,11 +379,10 @@ hr { border: none; border-top: 1px solid var(--border-color); margin: 32px 0; }
 .status-box.status-error { background-color: var(--danger-light); border-color: var(--danger-color); color: var(--danger-color); font-weight: 600; }
 .status-box.status-processing { background-color: var(--processing-light); border-color: var(--processing-color); color: var(--processing-color); font-weight: 600; }
 
-/* 10. Responsif */
+/* 10. Responsif - Portal 2 kolom di tablet, 1 di HP */
 @media (max-width: 992px) { /* Tablet */
   .input-grid { grid-template-columns: 1fr; } 
-  .portal-container { grid-template-columns: repeat(2, 1fr); gap: 24px; } /* Portal 2 kolom */
-  .portal-card { padding: 32px; }
+  /* Portal tetap 2 kolom di tablet, sesuai .portal-container */
 }
 @media (max-width: 768px) { /* Handphone */
   .page-header { padding: 32px 16px; margin-bottom: 32px; }
@@ -395,9 +394,6 @@ hr { border: none; border-top: 1px solid var(--border-color); margin: 32px 0; }
   .dropzone:before { font-size: 2.5em; }
   
   .portal-container { grid-template-columns: 1fr; gap: 24px; } /* Portal 1 kolom */
-  .portal-card { padding: 24px; }
-  .portal-card h2 { font-size: 1.4em; }
-  .portal-card p { margin-bottom: 24px; }
   
   .file-item { flex-direction: column; align-items: flex-start; gap: 10px; padding: 12px 14px; }
   .file-controls { width: 100%; justify-content: space-between; }
